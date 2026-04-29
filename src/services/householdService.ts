@@ -11,7 +11,9 @@ import { Household } from '../types/models';
 
 export async function createHousehold(
   userId: string,
-  name: string
+  name: string,
+  email: string = '',
+  displayName: string | null = null
 ): Promise<string> {
   console.log('Starting createHousehold for userId: ' + userId);
   try {
@@ -30,6 +32,8 @@ export async function createHousehold(
     console.log('About to write member doc...');
     await setDoc(doc(db, 'households', householdId, 'members', userId), {
       userId,
+      email,
+      displayName,
       role: 'owner',
       joinedAt: serverTimestamp(),
     });
