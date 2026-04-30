@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { getHouseholdMembers } from '../services/inviteService';
 import { HouseholdMember } from '../types/models';
+import { getFirstName } from '../utils/nameUtils';
 import { Colors } from '../constants/colors';
 
 export interface Assignee {
@@ -134,7 +135,9 @@ export function AssigneePickerSheet({
                     </Text>
                   </View>
                   <View style={styles.memberMain}>
-                    <Text style={styles.memberName}>{memberName(m)}</Text>
+                    <Text style={styles.memberName}>
+                      {getFirstName(memberName(m))}
+                    </Text>
                     <Text style={styles.memberRole}>{roleLabel(m.role)}</Text>
                   </View>
                   {selected ? <Text style={styles.checkmark}>✓</Text> : null}
@@ -177,7 +180,9 @@ export default function AssigneeSelector({
                 {initialsFor(currentAssignee.name, currentAssignee.name)}
               </Text>
             </View>
-            <Text style={styles.assigneeName}>{currentAssignee.name}</Text>
+            <Text style={styles.assigneeName}>
+              {getFirstName(currentAssignee.name)}
+            </Text>
             <TouchableOpacity
               onPress={(e) => {
                 e.stopPropagation();

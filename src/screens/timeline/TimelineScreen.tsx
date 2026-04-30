@@ -11,9 +11,16 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { differenceInCalendarDays } from 'date-fns';
 import { useAppStore } from '../../stores/appStore';
 import { getTasks, resetCompletedToday } from '../../services/taskService';
+import {
+  cancelAllReminders,
+  getNotificationPrefs,
+  scheduleAllTaskReminders,
+  sendTestNotification,
+} from '../../services/notificationService';
 import { seedDummyTasks } from '../../utils/seedTasks';
 import { Task } from '../../types/models';
 import UserAvatar from '../../components/UserAvatar';
+import { getFirstName } from '../../utils/nameUtils';
 import { Colors } from '../../constants/colors';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -93,15 +100,11 @@ function TaskCard({
           >
             {task.name}
           </Text>
-          <Text style={styles.taskMeta}>
-            {task.category}
-            {task.location ? ` • ${task.location}` : ''}
-          </Text>
           {assignedToMe ? (
             <Text style={styles.assignedToMe}>👤 Assigned to you</Text>
           ) : assignedToOther ? (
             <Text style={styles.assignedToOther}>
-              👤 {task.assignedToName ?? task.assignedTo}
+              👤 {getFirstName(task.assignedToName ?? task.assignedTo)}
             </Text>
           ) : null}
         </View>
@@ -189,10 +192,26 @@ export default function TimelineScreen() {
           console.warn('[TimelineScreen] resetCompletedToday failed:', e);
         })
         .then(() => getTasks(householdId))
-        .then((result) => {
+        .then(async (result) => {
           if (cancelled || !result) return;
           setTasks(result);
           setLoading(false);
+          if (currentUser?.uid) {
+            try {
+              const prefs = await getNotificationPrefs(currentUser.uid);
+              if (prefs.enabled) {
+                await scheduleAllTaskReminders(
+                  result,
+                  householdId,
+                  prefs.timing
+                );
+              } else {
+                await cancelAllReminders();
+              }
+            } catch (e) {
+              console.warn('[TimelineScreen] schedule reminders failed:', e);
+            }
+          }
         })
         .catch((e) => {
           if (cancelled) return;
@@ -203,7 +222,7 @@ export default function TimelineScreen() {
       return () => {
         cancelled = true;
       };
-    }, [householdId])
+    }, [householdId, currentUser?.uid])
   );
 
   const handleSeed = async () => {
@@ -343,6 +362,17 @@ export default function TimelineScreen() {
     <View style={styles.container}>
       {Header}
       <ScrollView contentContainerStyle={styles.listContent}>
+        {/* TEMP: remove after notifications confirmed working */}
+        <TouchableOpacity
+          style={styles.testButton}
+          onPress={() => {
+            void sendTestNotification();
+          }}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.testButtonText}>🔔 Test Notification</Text>
+        </TouchableOpacity>
+
         <View style={styles.filterRow}>
           <TouchableOpacity
             style={[
@@ -671,6 +701,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     paddingTop: 12,
+  },
+  testButton: {
+    marginTop: 12,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.urgencyAmber,
+    backgroundColor: '#FFFBEB',
+  },
+  testButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.urgencyAmber,
+    letterSpacing: 0.4,
   },
   filterPill: {
     paddingHorizontal: 14,

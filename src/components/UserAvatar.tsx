@@ -20,6 +20,16 @@ import { useNavigation } from '@react-navigation/native';
 import { auth } from '../config/firebase';
 import { useAuth } from '../hooks/useAuth';
 import { useAppStore } from '../stores/appStore';
+import {
+  cancelAllReminders,
+  getNotificationPrefs,
+  NotificationPrefs,
+  ReminderTiming,
+  scheduleAllTaskReminders,
+  setNotificationPrefs as saveNotificationPrefs,
+  SnoozeDuration,
+} from '../services/notificationService';
+import { getTasks } from '../services/taskService';
 import { Colors } from '../constants/colors';
 
 interface AvatarProps {
@@ -85,6 +95,7 @@ function ProfileSheet({ visible, onClose }: SheetProps) {
   const [mounted, setMounted] = useState(visible);
   const [showDisplayName, setShowDisplayName] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showNotifPrefs, setShowNotifPrefs] = useState(false);
 
   useEffect(() => {
     if (visible) setMounted(true);
@@ -98,9 +109,6 @@ function ProfileSheet({ visible, onClose }: SheetProps) {
   }, [visible, translateY]);
 
   if (!mounted || !user) return null;
-
-  const stub = (label: string) =>
-    Alert.alert(label, `${label} isn't available yet.`);
 
   const handleSignOut = async () => {
     onClose();
@@ -150,7 +158,7 @@ function ProfileSheet({ visible, onClose }: SheetProps) {
           <MenuRow
             icon="🔔"
             label="Notification Preferences"
-            onPress={() => stub('Notification Preferences')}
+            onPress={() => setShowNotifPrefs(true)}
           />
 
           <View style={styles.divider} />
@@ -173,7 +181,244 @@ function ProfileSheet({ visible, onClose }: SheetProps) {
         visible={showPassword}
         onClose={() => setShowPassword(false)}
       />
+      <NotificationPreferencesModal
+        visible={showNotifPrefs}
+        onClose={() => setShowNotifPrefs(false)}
+      />
     </Modal>
+  );
+}
+
+interface NotifPrefsProps {
+  visible: boolean;
+  onClose: () => void;
+}
+
+function NotificationPreferencesModal({ visible, onClose }: NotifPrefsProps) {
+  const currentUser = useAppStore((s) => s.currentUser);
+  const householdId = useAppStore((s) => s.currentHouseholdId);
+  const [prefs, setPrefs] = useState<NotificationPrefs>({
+    enabled: true,
+    timing: 'both',
+    snoozeDuration: '1day',
+  });
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!visible || !currentUser?.uid) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    getNotificationPrefs(currentUser.uid)
+      .then((p) => {
+        if (cancelled) return;
+        setPrefs(p);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        const err = e as { message?: string };
+        setError(err.message ?? String(e));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, currentUser?.uid]);
+
+  const applyAndSave = async (next: NotificationPrefs) => {
+    if (!currentUser?.uid) return;
+    setPrefs(next);
+    setSubmitting(true);
+    setError(null);
+    try {
+      await saveNotificationPrefs(currentUser.uid, next);
+      if (!next.enabled) {
+        await cancelAllReminders();
+      } else if (householdId) {
+        // Re-pull current tasks so timing change takes effect immediately.
+        const tasks = await getTasks(householdId);
+        await scheduleAllTaskReminders(tasks, householdId, next.timing);
+      }
+    } catch (e) {
+      const err = e as { message?: string };
+      setError(err.message ?? 'Failed to update preferences');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const toggleEnabled = () => {
+    void applyAndSave({ ...prefs, enabled: !prefs.enabled });
+  };
+
+  const setTiming = (timing: ReminderTiming) => {
+    if (prefs.timing === timing) return;
+    void applyAndSave({ ...prefs, timing });
+  };
+
+  const setSnooze = (snoozeDuration: SnoozeDuration) => {
+    if (prefs.snoozeDuration === snoozeDuration) return;
+    void applyAndSave({ ...prefs, snoozeDuration });
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View style={styles.centeredOverlay}>
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Notification Preferences</Text>
+
+          {loading ? (
+            <ActivityIndicator
+              color={Colors.primary}
+              style={notifStyles.loading}
+            />
+          ) : (
+            <>
+              <View style={notifStyles.toggleRow}>
+                <View style={notifStyles.toggleMain}>
+                  <Text style={notifStyles.toggleLabel}>
+                    🔔 Task Reminders
+                  </Text>
+                  <Text style={notifStyles.toggleSub}>
+                    Schedule local reminders for upcoming tasks
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={toggleEnabled}
+                  disabled={submitting}
+                  activeOpacity={0.7}
+                  style={[
+                    notifStyles.switchTrack,
+                    prefs.enabled && notifStyles.switchTrackOn,
+                  ]}
+                >
+                  <View
+                    style={[
+                      notifStyles.switchThumb,
+                      prefs.enabled && notifStyles.switchThumbOn,
+                    ]}
+                  />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={notifStyles.sectionLabel}>📅 Remind me</Text>
+              <View
+                style={[
+                  notifStyles.optionGroup,
+                  !prefs.enabled && notifStyles.optionGroupDisabled,
+                ]}
+              >
+                <TimingOption
+                  label="1 day before"
+                  active={prefs.timing === 'dayBefore'}
+                  disabled={!prefs.enabled || submitting}
+                  onPress={() => setTiming('dayBefore')}
+                />
+                <TimingOption
+                  label="Same day"
+                  active={prefs.timing === 'sameDay'}
+                  disabled={!prefs.enabled || submitting}
+                  onPress={() => setTiming('sameDay')}
+                />
+                <TimingOption
+                  label="Both"
+                  active={prefs.timing === 'both'}
+                  disabled={!prefs.enabled || submitting}
+                  onPress={() => setTiming('both')}
+                />
+              </View>
+
+              <Text style={notifStyles.sectionLabel}>😴 Snooze duration</Text>
+              <View
+                style={[
+                  notifStyles.optionGroup,
+                  !prefs.enabled && notifStyles.optionGroupDisabled,
+                ]}
+              >
+                <TimingOption
+                  label="1 hour"
+                  active={prefs.snoozeDuration === '1hour'}
+                  disabled={!prefs.enabled || submitting}
+                  onPress={() => setSnooze('1hour')}
+                />
+                <TimingOption
+                  label="3 hours"
+                  active={prefs.snoozeDuration === '3hours'}
+                  disabled={!prefs.enabled || submitting}
+                  onPress={() => setSnooze('3hours')}
+                />
+                <TimingOption
+                  label="1 day"
+                  active={prefs.snoozeDuration === '1day'}
+                  disabled={!prefs.enabled || submitting}
+                  onPress={() => setSnooze('1day')}
+                />
+                <TimingOption
+                  label="3 days"
+                  active={prefs.snoozeDuration === '3days'}
+                  disabled={!prefs.enabled || submitting}
+                  onPress={() => setSnooze('3days')}
+                />
+              </View>
+
+              {error ? (
+                <Text style={styles.errorText}>{error}</Text>
+              ) : null}
+            </>
+          )}
+
+          <View style={styles.cardButtonRow}>
+            <TouchableOpacity
+              style={[styles.cardButton, styles.cardButtonPrimary]}
+              onPress={onClose}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.cardButtonPrimaryText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+interface TimingOptionProps {
+  label: string;
+  active: boolean;
+  disabled: boolean;
+  onPress: () => void;
+}
+
+function TimingOption({ label, active, disabled, onPress }: TimingOptionProps) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      disabled={disabled}
+      activeOpacity={0.7}
+      style={[
+        notifStyles.optionRow,
+        active && notifStyles.optionRowActive,
+      ]}
+    >
+      <Text
+        style={[
+          notifStyles.optionLabel,
+          active && notifStyles.optionLabelActive,
+        ]}
+      >
+        {label}
+      </Text>
+      {active ? <Text style={notifStyles.optionCheck}>✓</Text> : null}
+    </TouchableOpacity>
   );
 }
 
@@ -555,5 +800,93 @@ const styles = StyleSheet.create({
   },
   cardButtonDisabled: {
     opacity: 0.6,
+  },
+});
+
+const notifStyles = StyleSheet.create({
+  loading: {
+    paddingVertical: 24,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 8,
+  },
+  toggleMain: {
+    flex: 1,
+  },
+  toggleLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+  },
+  toggleSub: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginTop: 2,
+  },
+  switchTrack: {
+    width: 48,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Colors.borderDark,
+    padding: 2,
+    justifyContent: 'center',
+  },
+  switchTrackOn: {
+    backgroundColor: Colors.primary,
+  },
+  switchThumb: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: Colors.cardBackground,
+  },
+  switchThumbOn: {
+    transform: [{ translateX: 20 }],
+  },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.textMuted,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    marginTop: 18,
+    marginBottom: 8,
+  },
+  optionGroup: {
+    backgroundColor: Colors.screenBackground,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  optionGroupDisabled: {
+    opacity: 0.4,
+  },
+  optionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  optionRowActive: {
+    backgroundColor: Colors.primaryLight,
+  },
+  optionLabel: {
+    flex: 1,
+    fontSize: 14,
+    color: Colors.textPrimary,
+    fontWeight: '500',
+  },
+  optionLabelActive: {
+    color: Colors.primary,
+    fontWeight: '700',
+  },
+  optionCheck: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.primary,
   },
 });

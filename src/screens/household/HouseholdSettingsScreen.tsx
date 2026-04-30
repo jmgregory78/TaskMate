@@ -37,6 +37,7 @@ import {
   HouseholdMember,
 } from '../../types/models';
 import InviteSheet from '../../components/InviteSheet';
+import { getFirstName } from '../../utils/nameUtils';
 import { Colors } from '../../constants/colors';
 
 function initialsFor(displayName: string | null, email: string): string {
@@ -465,11 +466,8 @@ export default function HouseholdSettingsScreen() {
                   </View>
                   <View style={styles.memberMain}>
                     <Text style={styles.memberEmail}>
-                      {m.email || m.userId}
+                      {getFirstName(m.displayName ?? m.email ?? m.userId)}
                     </Text>
-                    {m.displayName ? (
-                      <Text style={styles.memberName}>{m.displayName}</Text>
-                    ) : null}
                   </View>
                   <View
                     style={[

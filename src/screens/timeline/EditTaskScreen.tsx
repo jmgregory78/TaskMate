@@ -25,8 +25,8 @@ import DateTimePicker, {
 } from '@react-native-community/datetimepicker';
 import { useAuth } from '../../hooks/useAuth';
 import {
-  archiveTask,
   assignTask,
+  deleteTask,
   getTask,
   logActivity,
   updateTask,
@@ -42,6 +42,8 @@ import { weekOfMonthFor } from '../../utils/recurrence';
 import AssigneeSelector, {
   Assignee,
 } from '../../components/AssigneeSelector';
+import { sendAssignmentNotification } from '../../services/notificationService';
+import { getFirstName } from '../../utils/nameUtils';
 import { Colors } from '../../constants/colors';
 
 type EditTaskRoute = RouteProp<
@@ -297,6 +299,16 @@ export default function EditTaskScreen() {
           user.uid,
           user.displayName ?? user.email ?? user.uid
         );
+        if (assignee && assignee.userId !== user.uid) {
+          void sendAssignmentNotification(
+            assignee.userId,
+            task.name,
+            task.icon ?? '📋',
+            getFirstName(user.displayName ?? user.email ?? user.uid),
+            householdId,
+            taskId
+          );
+        }
       }
       if (user) {
         await logActivity(
@@ -317,32 +329,24 @@ export default function EditTaskScreen() {
     }
   };
 
-  const handleArchive = () => {
+  const handleDelete = () => {
     if (!task || submitting) return;
     Alert.alert(
-      `Archive ${task.name}?`,
-      'It will be hidden from your timeline.',
+      `Delete ${task.name}?`,
+      'This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Archive',
+          text: 'Delete',
           style: 'destructive',
           onPress: async () => {
             setSubmitting(true);
             try {
-              await archiveTask(householdId, taskId);
-              if (user) {
-                await logActivity(
-                  householdId,
-                  taskId,
-                  'archived',
-                  user.displayName ?? user.email ?? user.uid
-                );
-              }
+              await deleteTask(householdId, taskId);
               navigation.popToTop();
             } catch (e) {
               const err = e as { message?: string };
-              Alert.alert('Error', err.message ?? 'Failed to archive task');
+              Alert.alert('Error', err.message ?? 'Failed to delete task');
               setSubmitting(false);
             }
           },
@@ -687,12 +691,12 @@ export default function EditTaskScreen() {
             {error ? <Text style={styles.error}>{error}</Text> : null}
 
             <TouchableOpacity
-              style={styles.archiveLink}
-              onPress={handleArchive}
+              style={styles.deleteLink}
+              onPress={handleDelete}
               disabled={submitting}
               activeOpacity={0.7}
             >
-              <Text style={styles.archiveLinkText}>Archive Task</Text>
+              <Text style={styles.deleteLinkText}>🗑️ Delete Task</Text>
             </TouchableOpacity>
           </ScrollView>
         </TouchableWithoutFeedback>
@@ -976,12 +980,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 14,
   },
-  archiveLink: {
+  deleteLink: {
     alignItems: 'center',
     marginTop: 32,
     paddingVertical: 8,
   },
-  archiveLinkText: {
+  deleteLinkText: {
     color: Colors.error,
     fontSize: 14,
     fontWeight: '600',

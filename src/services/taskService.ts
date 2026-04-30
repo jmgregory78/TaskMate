@@ -1,6 +1,7 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -20,6 +21,7 @@ import {
   TaskActivity,
   TaskActivityType,
 } from '../types/models';
+import { getFirstName } from '../utils/nameUtils';
 import { suggestTaskIcon } from './iconService';
 
 type CreateTaskInput = Omit<
@@ -30,7 +32,6 @@ type CreateTaskInput = Omit<
   | 'nextDueDate'
   | 'lastCompletedAt'
   | 'lastCompletedBy'
-  | 'archived'
   | 'completedToday'
   | 'completedAt'
   | 'assignedTo'
@@ -120,7 +121,6 @@ function mapTaskDoc(id: string, data: any): Task {
     completedAt: toDateOrNull(data.completedAt),
     createdAt: toDate(data.createdAt),
     createdBy: data.createdBy,
-    archived: !!data.archived,
     assignedTo: data.assignedTo ?? null,
     assignedToName: data.assignedToName ?? null,
     assignedAt: toDateOrNull(data.assignedAt),
@@ -161,7 +161,6 @@ export async function createTask(
     completedAt: null,
     createdAt: serverTimestamp(),
     createdBy: userId,
-    archived: false,
     assignedTo,
     assignedToName,
     assignedAt: assignedTo ? serverTimestamp() : null,
@@ -225,7 +224,6 @@ export async function getActivityLog(
 export async function getTasks(householdId: string): Promise<Task[]> {
   const q = query(
     tasksCollection(householdId),
-    where('archived', '==', false),
     orderBy('nextDueDate', 'asc')
   );
   const snap = await getDocs(q);
@@ -283,9 +281,11 @@ export async function assignTask(
     assignedAt: assignedTo ? serverTimestamp() : null,
     assignedBy: assignedTo ? assignedBy : null,
   });
+  const byFirst = getFirstName(assignedByName);
+  const toFirst = assignedToName ? getFirstName(assignedToName) : null;
   const note = assignedTo
-    ? `${assignedByName} assigned this to ${assignedToName ?? assignedTo}`
-    : `${assignedByName} unassigned this task`;
+    ? `${byFirst} assigned this to ${toFirst ?? assignedTo}`
+    : `${byFirst} unassigned this task`;
   await logActivity(householdId, taskId, 'assigned', assignedBy, note);
 }
 
@@ -329,10 +329,20 @@ export async function resetCompletedToday(householdId: string): Promise<void> {
   );
 }
 
-export async function archiveTask(
+export async function deleteTask(
   householdId: string,
   taskId: string
 ): Promise<void> {
-  const ref = doc(db, 'households', householdId, 'tasks', taskId);
-  await updateDoc(ref, { archived: true });
+  // Delete subcollections first (Firestore doesn't cascade automatically).
+  const usagesSnap = await getDocs(
+    collection(db, 'households', householdId, 'tasks', taskId, 'productUsages')
+  );
+  await Promise.all(usagesSnap.docs.map((d) => deleteDoc(d.ref)));
+
+  const activitySnap = await getDocs(
+    collection(db, 'households', householdId, 'tasks', taskId, 'activity')
+  );
+  await Promise.all(activitySnap.docs.map((d) => deleteDoc(d.ref)));
+
+  await deleteDoc(doc(db, 'households', householdId, 'tasks', taskId));
 }

@@ -105,7 +105,6 @@ export interface Task {
   completedAt: Date | null;
   createdAt: Date;
   createdBy: string;
-  archived: boolean;
   assignedTo: string | null;
   assignedToName: string | null;
   assignedAt: Date | null;
@@ -133,7 +132,6 @@ export type TaskActivityType =
   | 'completed'
   | 'created'
   | 'edited'
-  | 'archived'
   | 'assigned';
 
 export interface TaskActivity {

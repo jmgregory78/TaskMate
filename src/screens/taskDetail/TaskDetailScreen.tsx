@@ -19,13 +19,14 @@ import { differenceInCalendarDays, format } from 'date-fns';
 import { useAuth } from '../../hooks/useAuth';
 import { useAppStore } from '../../stores/appStore';
 import {
-  archiveTask,
   assignTask,
   completeTask,
+  deleteTask,
   getActivityLog,
   getTask,
-  logActivity,
 } from '../../services/taskService';
+import { getFirstName } from '../../utils/nameUtils';
+import { sendAssignmentNotification } from '../../services/notificationService';
 import {
   deductProductUsage,
   flagPurchasePending,
@@ -63,7 +64,6 @@ const ACTIVITY_ICONS: Record<TaskActivity['type'], string> = {
   completed: '✅',
   created: '➕',
   edited: '📝',
-  archived: '📦',
   assigned: '👤',
 };
 
@@ -286,6 +286,16 @@ export default function TaskDetailScreen() {
         user.uid,
         user.displayName ?? user.email ?? user.uid
       );
+      if (next && next.userId !== user.uid) {
+        void sendAssignmentNotification(
+          next.userId,
+          task.name,
+          task.icon ?? '📋',
+          getFirstName(user.displayName ?? user.email ?? user.uid),
+          householdId,
+          taskId
+        );
+      }
       await refreshTask();
     } catch (e) {
       const err = e as { message?: string };
@@ -293,34 +303,30 @@ export default function TaskDetailScreen() {
     }
   };
 
-  const handleArchive = () => {
+  const handleDelete = () => {
     if (!task || !householdId || actionPending) return;
-    Alert.alert('Archive task', `Archive "${task.name}"?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Archive',
-        style: 'destructive',
-        onPress: async () => {
-          setActionPending(true);
-          try {
-            await archiveTask(householdId, taskId);
-            if (user) {
-              await logActivity(
-                householdId,
-                taskId,
-                'archived',
-                user.displayName ?? user.email ?? user.uid
-              );
+    Alert.alert(
+      `Delete ${task.name}?`,
+      'This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setActionPending(true);
+            try {
+              await deleteTask(householdId, taskId);
+              navigation.goBack();
+            } catch (e) {
+              const err = e as { message?: string };
+              Alert.alert('Error', err.message ?? 'Failed to delete task');
+              setActionPending(false);
             }
-            navigation.goBack();
-          } catch (e) {
-            const err = e as { message?: string };
-            Alert.alert('Error', err.message ?? 'Failed to archive task');
-            setActionPending(false);
-          }
+          },
         },
-      },
-    ]);
+      ]
+    );
   };
 
   if (loading) {
@@ -384,30 +390,6 @@ export default function TaskDetailScreen() {
         <Text style={styles.recurrence}>
           {recurrenceSummary(task.recurrence, task.firstDueDate)}
         </Text>
-      </View>
-
-      <View style={styles.assignmentRow}>
-        {currentAssignee ? (
-          <>
-            <View style={styles.assignmentAvatar}>
-              <Text style={styles.assignmentAvatarText}>
-                {initialsFor(currentAssignee.name)}
-              </Text>
-            </View>
-            <Text style={styles.assignmentText}>
-              👤 Assigned to {currentAssignee.name}
-            </Text>
-          </>
-        ) : (
-          <Text style={styles.assignmentTextMuted}>👤 Unassigned</Text>
-        )}
-        <TouchableOpacity
-          style={styles.reassignButton}
-          onPress={() => setAssigneeSheetVisible(true)}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.reassignButtonText}>Reassign</Text>
-        </TouchableOpacity>
       </View>
 
       {task.description ? (
@@ -543,6 +525,33 @@ export default function TaskDetailScreen() {
         </TouchableOpacity>
       )}
 
+      <View style={styles.assignmentRow}>
+        {currentAssignee ? (
+          <>
+            <View style={styles.assignmentAvatar}>
+              <Text style={styles.assignmentAvatarText}>
+                {initialsFor(currentAssignee.name)}
+              </Text>
+            </View>
+            <Text style={styles.assignmentText}>
+              👤 Assigned to{' '}
+              {currentAssignee.userId === user?.uid
+                ? 'you'
+                : getFirstName(currentAssignee.name)}
+            </Text>
+          </>
+        ) : (
+          <Text style={styles.assignmentTextMuted}>👤 Unassigned</Text>
+        )}
+        <TouchableOpacity
+          style={styles.reassignButton}
+          onPress={() => setAssigneeSheetVisible(true)}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.reassignButtonText}>Reassign</Text>
+        </TouchableOpacity>
+      </View>
+
       <TouchableOpacity
         style={styles.editButton}
         onPress={() => {
@@ -577,7 +586,7 @@ export default function TaskDetailScreen() {
                 <Text style={styles.activityTitle}>
                   {a.type === 'assigned' && a.note
                     ? a.note
-                    : `${a.performedBy} ${a.type} this task`}
+                    : `${getFirstName(a.performedBy)} ${a.type} this task`}
                 </Text>
                 <Text style={styles.activityDate}>
                   {format(a.performedAt, 'MMM d, yyyy · h:mm a')}
@@ -592,12 +601,12 @@ export default function TaskDetailScreen() {
       </View>
 
       <TouchableOpacity
-        style={styles.archiveLink}
-        onPress={handleArchive}
+        style={styles.deleteLink}
+        onPress={handleDelete}
         disabled={actionPending}
         activeOpacity={0.7}
       >
-        <Text style={styles.archiveLinkText}>Archive Task</Text>
+        <Text style={styles.deleteLinkText}>🗑️ Delete Task</Text>
       </TouchableOpacity>
       </ScrollView>
       <CompleteTaskSheet
@@ -968,12 +977,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.textSecondary,
   },
-  archiveLink: {
+  deleteLink: {
     alignItems: 'center',
     marginTop: 32,
     paddingVertical: 8,
   },
-  archiveLinkText: {
+  deleteLinkText: {
     color: Colors.error,
     fontSize: 14,
     fontWeight: '600',

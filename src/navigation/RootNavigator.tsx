@@ -10,14 +10,26 @@ import {
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import * as Notifications from 'expo-notifications';
 import { useAuth } from '../hooks/useAuth';
 import { useAppStore } from '../stores/appStore';
 import { getUserHousehold } from '../services/householdService';
-import { resetCompletedToday } from '../services/taskService';
+import {
+  completeTask,
+  getTasks,
+  resetCompletedToday,
+} from '../services/taskService';
 import {
   clearPurchasePending,
   getPendingPurchases,
 } from '../services/productService';
+import {
+  computeSnoozeTriggerDate,
+  getNotificationPrefs,
+  registerForPushNotifications,
+  registerNotificationCategories,
+  scheduleAllTaskReminders,
+} from '../services/notificationService';
 import LoginScreen from '../screens/auth/LoginScreen';
 import SignUpScreen from '../screens/auth/SignUpScreen';
 import CreateHouseholdScreen from '../screens/onboarding/CreateHouseholdScreen';
@@ -192,6 +204,85 @@ export default function RootNavigator() {
     setPendingFetchedFor(currentHouseholdId);
     fetchPending(currentHouseholdId);
   }, [currentHouseholdId, pendingFetchedFor]);
+
+  // Register notification categories on mount (independent of auth state)
+  // so the action buttons exist before any reminder fires.
+  useEffect(() => {
+    void registerNotificationCategories();
+  }, []);
+
+  // Register for push notifications + handle responses (tap, Complete, Snooze).
+  useEffect(() => {
+    if (!user?.uid || !currentHouseholdId) return;
+    void registerForPushNotifications(user.uid);
+
+    const sub = Notifications.addNotificationResponseReceivedListener(
+      async (response) => {
+        const data = response.notification.request.content.data ?? {};
+        const taskId = typeof data.taskId === 'string' ? data.taskId : null;
+        const dataHouseholdId =
+          typeof data.householdId === 'string' ? data.householdId : null;
+        const hhId = dataHouseholdId || currentHouseholdId;
+        const actionId = response.actionIdentifier;
+
+        if (!taskId || !hhId) return;
+
+        if (actionId === 'COMPLETE') {
+          try {
+            await completeTask(
+              hhId,
+              taskId,
+              user.displayName ?? user.email ?? user.uid
+            );
+            const updatedTasks = await getTasks(hhId);
+            const prefs = await getNotificationPrefs(user.uid);
+            if (prefs.enabled) {
+              await scheduleAllTaskReminders(updatedTasks, hhId, prefs.timing);
+            }
+          } catch (e) {
+            console.warn('[Notifications] background complete failed:', e);
+          }
+          return;
+        }
+
+        if (actionId === 'SNOOZE') {
+          try {
+            const prefs = await getNotificationPrefs(user.uid);
+            const triggerDate = computeSnoozeTriggerDate(prefs.snoozeDuration);
+            await Notifications.cancelScheduledNotificationAsync(
+              response.notification.request.identifier
+            );
+            const original = response.notification.request.content;
+            await Notifications.scheduleNotificationAsync({
+              content: {
+                title: original.title ?? 'Task reminder',
+                body: 'Snoozed reminder — this task is still due!',
+                data: { taskId, householdId: hhId },
+                sound: true,
+                categoryIdentifier: 'TASK_REMINDER',
+              },
+              trigger: {
+                type: Notifications.SchedulableTriggerInputTypes.DATE,
+                date: triggerDate,
+              },
+            });
+          } catch (e) {
+            console.warn('[Notifications] snooze failed:', e);
+          }
+          return;
+        }
+
+        // Default tap → navigate to task detail
+        if (navigationRef.current) {
+          navigationRef.current.navigate('TaskDetail', { taskId });
+        }
+      }
+    );
+
+    return () => {
+      sub.remove();
+    };
+  }, [user?.uid, user?.email, user?.displayName, currentHouseholdId]);
 
   useEffect(() => {
     const handleAppStateChange = (next: AppStateStatus) => {
