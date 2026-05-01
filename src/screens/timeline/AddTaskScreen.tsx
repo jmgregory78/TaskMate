@@ -29,9 +29,12 @@ import {
 } from '../../types/models';
 import { weekOfMonthFor } from '../../utils/recurrence';
 import ScreenWrapper from '../../components/ScreenWrapper';
+import ScreenHeader from '../../components/ScreenHeader';
 import AssigneeSelector, {
   Assignee,
 } from '../../components/AssigneeSelector';
+import ReminderPicker from '../../components/ReminderPicker';
+import { StatusBar } from 'expo-status-bar';
 import { Colors } from '../../constants/colors';
 
 const FREQUENCIES: { key: RecurrenceFrequency; label: string }[] = [
@@ -86,6 +89,8 @@ export default function AddTaskScreen() {
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [reminderDaysBefore, setReminderDaysBefore] = useState<number>(1);
 
   const [assignee, setAssignee] = useState<Assignee | null>(() =>
     user
@@ -235,6 +240,7 @@ export default function AddTaskScreen() {
           instructions: null,
           assignedTo: assignee?.userId ?? null,
           assignedToName: assignee?.name ?? null,
+          reminderDaysBefore,
         },
         user.uid
       );
@@ -263,19 +269,11 @@ export default function AddTaskScreen() {
   };
 
   return (
-    <ScreenWrapper contentContainerStyle={styles.content}>
-      <View style={styles.headerRow}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.cancel}>Cancel</Text>
-        </TouchableOpacity>
-        <Text style={styles.heading}>New Task</Text>
-        <View style={styles.headerSpacer} />
-      </View>
-
-      <Text style={styles.label}>Task name</Text>
+    <>
+      <StatusBar style="dark" />
+      <ScreenHeader title="New Task" leftLabel="Back" />
+      <ScreenWrapper contentContainerStyle={styles.content}>
+        <Text style={styles.label}>Task name</Text>
       <TextInput
         style={styles.input}
         placeholder="e.g. Replace AC filter"
@@ -588,6 +586,12 @@ export default function AddTaskScreen() {
         </View>
       )}
 
+      <Text style={styles.sectionHeader}>🔔 Remind me</Text>
+      <ReminderPicker
+        value={reminderDaysBefore}
+        onChange={setReminderDaysBefore}
+      />
+
       <Text style={styles.sectionHeader}>👤 Assign To</Text>
       {householdId ? (
         <AssigneeSelector
@@ -611,7 +615,8 @@ export default function AddTaskScreen() {
           <Text style={styles.buttonText}>Save Task</Text>
         )}
       </TouchableOpacity>
-    </ScreenWrapper>
+      </ScreenWrapper>
+    </>
   );
 }
 
@@ -641,27 +646,7 @@ function RadioRow({ label, selected, onPress, right }: RadioRowProps) {
 const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 24,
-    paddingTop: 56,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 24,
-  },
-  heading: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-  },
-  headerSpacer: {
-    width: 56,
-  },
-  cancel: {
-    color: Colors.primary,
-    fontSize: 16,
-    fontWeight: '600',
-    width: 56,
+    paddingTop: 16,
   },
   label: {
     fontSize: 14,

@@ -10,15 +10,10 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#2D3748"
     },
     "ios": {
-      "bundleIdentifier": "com.jasongregory.taskmate",
-      "buildNumber": "1",
-      "supportsTablet": false,
-      "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
-      }
+      "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
@@ -32,22 +27,7 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "@react-native-community/datetimepicker",
-      "expo-dev-client",
-      "expo-notifications",
-      [
-        "expo-build-properties",
-        {
-          "ios": {
-            "useFrameworks": "static"
-          }
-        }
-      ]
-    ],
-    "extra": {
-      "eas": {
-        "projectId": "26d9eb72-7f17-4bfe-9603-4364feaa3bc1"
-      }
-    }
+      "@react-native-community/datetimepicker"
+    ]
   }
 }

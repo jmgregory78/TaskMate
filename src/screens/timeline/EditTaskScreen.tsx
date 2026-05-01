@@ -18,7 +18,6 @@ import {
   useNavigation,
   useRoute,
 } from '@react-navigation/native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { format } from 'date-fns';
 import DateTimePicker, {
   DateTimePickerEvent,
@@ -26,7 +25,6 @@ import DateTimePicker, {
 import { useAuth } from '../../hooks/useAuth';
 import {
   assignTask,
-  deleteTask,
   getTask,
   logActivity,
   updateTask,
@@ -42,8 +40,11 @@ import { weekOfMonthFor } from '../../utils/recurrence';
 import AssigneeSelector, {
   Assignee,
 } from '../../components/AssigneeSelector';
+import ScreenHeader from '../../components/ScreenHeader';
+import ReminderPicker from '../../components/ReminderPicker';
 import { sendAssignmentNotification } from '../../services/notificationService';
 import { getFirstName } from '../../utils/nameUtils';
+import { StatusBar } from 'expo-status-bar';
 import { Colors } from '../../constants/colors';
 
 type EditTaskRoute = RouteProp<
@@ -133,6 +134,7 @@ export default function EditTaskScreen() {
   const [showEndByPicker, setShowEndByPicker] = useState(false);
 
   const [assignee, setAssignee] = useState<Assignee | null>(null);
+  const [reminderDaysBefore, setReminderDaysBefore] = useState<number>(1);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -169,6 +171,9 @@ export default function EditTaskScreen() {
           t.assignedTo
             ? { userId: t.assignedTo, name: t.assignedToName ?? t.assignedTo }
             : null
+        );
+        setReminderDaysBefore(
+          typeof t.reminderDaysBefore === 'number' ? t.reminderDaysBefore : 1
         );
         setLoading(false);
       })
@@ -225,6 +230,7 @@ export default function EditTaskScreen() {
     if (!sameDay(nextDueDate, task.nextDueDate)) return true;
     if (!recurrenceEqual(buildRecurrence(), task.recurrence)) return true;
     if ((assignee?.userId ?? null) !== (task.assignedTo ?? null)) return true;
+    if (reminderDaysBefore !== (task.reminderDaysBefore ?? 1)) return true;
     return false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -241,6 +247,7 @@ export default function EditTaskScreen() {
     endAfterText,
     endByDate,
     assignee,
+    reminderDaysBefore,
   ]);
 
   const canSave = dirty && !submitting;
@@ -282,6 +289,9 @@ export default function EditTaskScreen() {
       if (!sameDay(nextDueDate, task.nextDueDate)) {
         changed.nextDueDate = nextDueDate;
         changed.firstDueDate = nextDueDate;
+      }
+      if (reminderDaysBefore !== (task.reminderDaysBefore ?? 1)) {
+        changed.reminderDaysBefore = reminderDaysBefore;
       }
       if (!recurrenceEqual(newRecurrence, task.recurrence)) {
         changed.recurrence = newRecurrence;
@@ -329,41 +339,12 @@ export default function EditTaskScreen() {
     }
   };
 
-  const handleDelete = () => {
-    if (!task || submitting) return;
-    Alert.alert(
-      `Delete ${task.name}?`,
-      'This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            setSubmitting(true);
-            try {
-              await deleteTask(householdId, taskId);
-              navigation.popToTop();
-            } catch (e) {
-              const err = e as { message?: string };
-              Alert.alert('Error', err.message ?? 'Failed to delete task');
-              setSubmitting(false);
-            }
-          },
-        },
-      ]
-    );
-  };
 
   if (loading) {
     return (
       <View style={styles.screen}>
-        <SafeAreaView edges={['top']} style={styles.safeTop} />
-        <View style={styles.header}>
-          <View style={styles.headerSide} />
-          <Text style={styles.headerTitle}>Edit Task</Text>
-          <View style={styles.headerSide} />
-        </View>
+        <StatusBar style="dark" />
+        <ScreenHeader title="Edit Task" leftLabel="Back" />
         <View style={styles.center}>
           <ActivityIndicator size="large" color={Colors.primary} />
         </View>
@@ -374,18 +355,8 @@ export default function EditTaskScreen() {
   if (loadError || !task) {
     return (
       <View style={styles.screen}>
-        <SafeAreaView edges={['top']} style={styles.safeTop} />
-        <View style={styles.header}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            activeOpacity={0.7}
-            style={styles.headerSide}
-          >
-            <Text style={styles.headerSideText}>← Back</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Edit Task</Text>
-          <View style={styles.headerSide} />
-        </View>
+        <StatusBar style="dark" />
+        <ScreenHeader title="Edit Task" leftLabel="Back" />
         <View style={styles.center}>
           <Text style={styles.errorText}>{loadError ?? 'Task not found'}</Text>
         </View>
@@ -395,32 +366,14 @@ export default function EditTaskScreen() {
 
   return (
     <View style={styles.screen}>
-      <SafeAreaView edges={['top']} style={styles.safeTop} />
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          activeOpacity={0.7}
-          style={styles.headerSide}
-        >
-          <Text style={styles.headerSideText}>← Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Edit Task</Text>
-        <TouchableOpacity
-          onPress={handleSave}
-          disabled={!canSave}
-          activeOpacity={0.7}
-          style={styles.headerSide}
-        >
-          <Text
-            style={[
-              styles.saveLink,
-              !canSave && styles.saveLinkDisabled,
-            ]}
-          >
-            {submitting ? '...' : 'Save'}
-          </Text>
-        </TouchableOpacity>
-      </View>
+      <StatusBar style="dark" />
+      <ScreenHeader
+        title="Edit Task"
+        leftLabel="Back"
+        rightLabel={submitting ? '...' : 'Save'}
+        rightDisabled={!canSave}
+        onRightPress={handleSave}
+      />
 
       <KeyboardAvoidingView
         style={styles.flex}
@@ -681,6 +634,12 @@ export default function EditTaskScreen() {
               )}
             </View>
 
+            <Text style={styles.sectionHeader}>🔔 Remind me</Text>
+            <ReminderPicker
+              value={reminderDaysBefore}
+              onChange={setReminderDaysBefore}
+            />
+
             <Text style={styles.sectionHeader}>👤 Assign To</Text>
             <AssigneeSelector
               householdId={householdId}
@@ -689,15 +648,6 @@ export default function EditTaskScreen() {
             />
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
-
-            <TouchableOpacity
-              style={styles.deleteLink}
-              onPress={handleDelete}
-              disabled={submitting}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.deleteLinkText}>🗑️ Delete Task</Text>
-            </TouchableOpacity>
           </ScrollView>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
@@ -979,15 +929,5 @@ const styles = StyleSheet.create({
     marginTop: 16,
     textAlign: 'center',
     fontSize: 14,
-  },
-  deleteLink: {
-    alignItems: 'center',
-    marginTop: 32,
-    paddingVertical: 8,
-  },
-  deleteLinkText: {
-    color: Colors.error,
-    fontSize: 14,
-    fontWeight: '600',
   },
 });

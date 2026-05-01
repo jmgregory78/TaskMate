@@ -9,9 +9,11 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import ScreenWrapper from '../../components/ScreenWrapper';
+import ScreenHeader from '../../components/ScreenHeader';
 import { useAuth } from '../../hooks/useAuth';
 import { useAppStore } from '../../stores/appStore';
 import { createProduct } from '../../services/productService';
+import { StatusBar } from 'expo-status-bar';
 import { Colors } from '../../constants/colors';
 
 function parseNumber(value: string, fallback: number): number {
@@ -71,29 +73,17 @@ export default function CreateProductScreen() {
   };
 
   return (
-    <ScreenWrapper contentContainerStyle={styles.content}>
-      <View style={styles.headerRow}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.backLink}>← Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.heading}>New Supply</Text>
-        <TouchableOpacity
-          onPress={handleSubmit}
-          disabled={!canSubmit}
-          activeOpacity={0.7}
-        >
-          <Text
-            style={[styles.saveLink, !canSubmit && styles.saveLinkDisabled]}
-          >
-            Save
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.card}>
+    <>
+      <StatusBar style="dark" />
+      <ScreenHeader
+        title="New Supply"
+        leftLabel="Supplies"
+        rightLabel={submitting ? '...' : 'Save'}
+        rightDisabled={!canSubmit}
+        onRightPress={handleSubmit}
+      />
+      <ScreenWrapper contentContainerStyle={styles.content}>
+        <View style={styles.card}>
         <Text style={styles.label}>Product name</Text>
         <TextInput
           style={styles.input}
@@ -175,8 +165,9 @@ export default function CreateProductScreen() {
             <Text style={styles.buttonText}>Save Supply</Text>
           )}
         </TouchableOpacity>
-      </View>
-    </ScreenWrapper>
+        </View>
+      </ScreenWrapper>
+    </>
   );
 }
 

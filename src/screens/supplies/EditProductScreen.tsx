@@ -20,6 +20,7 @@ import {
   updateProduct,
 } from '../../services/productService';
 import { Product } from '../../types/models';
+import { StatusBar } from 'expo-status-bar';
 import { Colors } from '../../constants/colors';
 
 type Route = RouteProp<{ EditProduct: { product: Product } }, 'EditProduct'>;
@@ -101,7 +102,7 @@ export default function EditProductScreen() {
     if (!householdId) return;
     Alert.alert(
       `Delete ${product.name}?`,
-      'This will remove it from all tasks that use it. This cannot be undone.',
+      'This will remove it from all tasks that use it and cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -126,6 +127,8 @@ export default function EditProductScreen() {
   };
 
   return (
+    <>
+    <StatusBar style="dark" />
     <ScreenWrapper contentContainerStyle={styles.content}>
       <View style={styles.headerRow}>
         <TouchableOpacity
@@ -230,6 +233,7 @@ export default function EditProductScreen() {
         <Text style={styles.deleteLinkText}>Delete Supply</Text>
       </TouchableOpacity>
     </ScreenWrapper>
+    </>
   );
 }
 

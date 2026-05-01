@@ -125,6 +125,8 @@ function mapTaskDoc(id: string, data: any): Task {
     assignedToName: data.assignedToName ?? null,
     assignedAt: toDateOrNull(data.assignedAt),
     assignedBy: data.assignedBy ?? null,
+    reminderDaysBefore:
+      typeof data.reminderDaysBefore === 'number' ? data.reminderDaysBefore : 1,
   };
 }
 
@@ -165,6 +167,8 @@ export async function createTask(
     assignedToName,
     assignedAt: assignedTo ? serverTimestamp() : null,
     assignedBy: assignedTo ? (creatorUid ?? userId) : null,
+    reminderDaysBefore:
+      typeof data.reminderDaysBefore === 'number' ? data.reminderDaysBefore : 1,
   });
   await logActivity(householdId, ref.id, 'created', userId);
   return ref.id;

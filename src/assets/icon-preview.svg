@@ -1,0 +1,40 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024"
+     xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2D3748"/>
+      <stop offset="100%" style="stop-color:#1A202C"/>
+    </linearGradient>
+    <linearGradient id="checkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#48BB78"/>
+      <stop offset="100%" style="stop-color:#276749"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Rounded background -->
+  <rect width="1024" height="1024" rx="220" ry="220" fill="url(#bg)"/>
+
+  <!-- House outline (white, clean lines) -->
+  <!-- Roof -->
+  <polygon points="512,160 840,450 184,450"
+           fill="none" stroke="white" stroke-width="36"
+           stroke-linejoin="round"/>
+  <!-- Walls -->
+  <rect x="220" y="430" width="584" height="380" rx="12"
+        fill="none" stroke="white" stroke-width="36"/>
+  <!-- Door -->
+  <rect x="412" y="590" width="200" height="220" rx="16"
+        fill="none" stroke="white" stroke-width="28"/>
+
+  <!-- Green checkmark circle (bottom right) -->
+  <circle cx="730" cy="730" r="170" fill="url(#checkGrad)"/>
+  <!-- White border ring -->
+  <circle cx="730" cy="730" r="170" fill="none"
+          stroke="#1A202C" stroke-width="16"/>
+  <!-- Checkmark -->
+  <polyline points="635,730 700,800 830,650"
+            fill="none" stroke="white"
+            stroke-width="56"
+            stroke-linecap="round"
+            stroke-linejoin="round"/>
+</svg>

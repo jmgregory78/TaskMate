@@ -115,6 +115,19 @@ const SEED_ASSIGNED_TO_USER = new Set([
   'Oil Change – Honda CR-V',
 ]);
 
+const SEED_REMINDER_OVERRIDES: Record<string, number> = {
+  'Oil Change – Honda CR-V': 30,
+  'Rotate Tires – Honda CR-V': 14,
+  'Replace HVAC Filter': 7,
+  'Clean Gutters': 14,
+  'Flush Water Heater': 7,
+  'Pay Property Taxes': 30,
+  'File Federal Tax Return': 30,
+  'Review Home Insurance Policy': 30,
+  'Service Lawnmower': 14,
+  'Drain & Refill Hot Tub': 14,
+};
+
 export async function seedDummyTasks(
   householdId: string,
   userId: string,
@@ -141,6 +154,7 @@ export async function seedDummyTasks(
       assignedToName: shouldAssign
         ? (assigneeName ?? assigneeUserId ?? null)
         : null,
+      reminderDaysBefore: SEED_REMINDER_OVERRIDES[t.name] ?? 1,
     });
     taskIdsByName[t.name] = id;
   }

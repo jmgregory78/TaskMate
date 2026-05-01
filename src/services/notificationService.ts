@@ -14,15 +14,17 @@ export interface NotificationPrefs {
   enabled: boolean;
   timing: ReminderTiming;
   snoozeDuration: SnoozeDuration;
+  reminderHour: number;
+  reminderMinute: number;
 }
 
 const DEFAULT_PREFS: NotificationPrefs = {
   enabled: true,
   timing: 'both',
   snoozeDuration: '1day',
+  reminderHour: 9,
+  reminderMinute: 0,
 };
-
-const TASK_CATEGORY = 'TASK_REMINDER';
 
 export function computeSnoozeTriggerDate(duration: SnoozeDuration): Date {
   const now = new Date();
@@ -44,33 +46,6 @@ export function computeSnoozeTriggerDate(duration: SnoozeDuration): Date {
       d.setHours(9, 0, 0, 0);
       return d;
     }
-  }
-}
-
-export async function registerNotificationCategories(): Promise<void> {
-  try {
-    await Notifications.setNotificationCategoryAsync(TASK_CATEGORY, [
-      {
-        identifier: 'COMPLETE',
-        buttonTitle: '✅ Mark Complete',
-        options: {
-          isDestructive: false,
-          isAuthenticationRequired: false,
-          opensAppToForeground: false,
-        },
-      },
-      {
-        identifier: 'SNOOZE',
-        buttonTitle: '😴 Snooze 1 Day',
-        options: {
-          isDestructive: false,
-          isAuthenticationRequired: false,
-          opensAppToForeground: false,
-        },
-      },
-    ]);
-  } catch (e) {
-    console.warn('[notifications] register categories failed:', e);
   }
 }
 
@@ -129,11 +104,13 @@ export async function scheduleTaskReminder(
   taskIcon: string,
   dueDate: Date,
   householdId: string,
-  daysBefore: number = 1
+  daysBefore: number,
+  reminderHour: number = 9,
+  reminderMinute: number = 0
 ): Promise<string | null> {
   const triggerDate = new Date(dueDate);
   triggerDate.setDate(triggerDate.getDate() - daysBefore);
-  triggerDate.setHours(9, 0, 0, 0);
+  triggerDate.setHours(reminderHour, reminderMinute, 0, 0);
 
   if (triggerDate <= new Date()) return null;
 
@@ -143,11 +120,10 @@ export async function scheduleTaskReminder(
         title: `${taskIcon} ${taskName}`,
         body:
           daysBefore === 0
-            ? 'This task is due today!'
+            ? `${taskIcon} ${taskName} is due today!`
             : `Due in ${daysBefore} day${daysBefore > 1 ? 's' : ''}`,
         data: { taskId, householdId },
         sound: true,
-        categoryIdentifier: TASK_CATEGORY,
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.DATE,
@@ -180,44 +156,47 @@ export async function cancelAllReminders(): Promise<void> {
 export async function scheduleAllTaskReminders(
   tasks: Task[],
   householdId: string,
-  timing: ReminderTiming = 'both'
+  // Kept for backward compatibility — per-task `reminderDaysBefore`
+  // takes precedence and drives scheduling.
+  _timing: ReminderTiming = 'both',
+  reminderHour: number = 9,
+  reminderMinute: number = 0
 ): Promise<void> {
   await cancelAllReminders();
 
-  const now = Date.now();
   for (const task of tasks) {
     if (!task.nextDueDate || task.completedToday) continue;
     const dueDate =
       task.nextDueDate instanceof Date
         ? task.nextDueDate
         : new Date(task.nextDueDate);
-    const daysUntilDue = Math.ceil(
-      (dueDate.getTime() - now) / (1000 * 60 * 60 * 24)
+
+    const daysBefore =
+      typeof task.reminderDaysBefore === 'number' ? task.reminderDaysBefore : 1;
+
+    if (daysBefore > 0) {
+      await scheduleTaskReminder(
+        task.id,
+        task.name,
+        task.icon || '📋',
+        dueDate,
+        householdId,
+        daysBefore,
+        reminderHour,
+        reminderMinute
+      );
+    }
+
+    await scheduleTaskReminder(
+      task.id,
+      task.name,
+      task.icon || '📋',
+      dueDate,
+      householdId,
+      0,
+      reminderHour,
+      reminderMinute
     );
-
-    const wantsDayBefore = timing === 'dayBefore' || timing === 'both';
-    const wantsSameDay = timing === 'sameDay' || timing === 'both';
-
-    if (wantsDayBefore && daysUntilDue >= 2) {
-      await scheduleTaskReminder(
-        task.id,
-        task.name,
-        task.icon || '📋',
-        dueDate,
-        householdId,
-        1
-      );
-    }
-    if (wantsSameDay && daysUntilDue >= 0) {
-      await scheduleTaskReminder(
-        task.id,
-        task.name,
-        task.icon || '📋',
-        dueDate,
-        householdId,
-        0
-      );
-    }
   }
 }
 
@@ -251,11 +230,16 @@ export async function sendAssignmentNotification(
   }
 }
 
-export async function sendTestNotification(): Promise<void> {
+export async function sendTestNotification(
+  taskId: string,
+  taskName: string,
+  householdId: string
+): Promise<void> {
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: '🔔 TaskMate Test',
-      body: 'Push notifications are working!',
+      title: '🔔 Test Reminder',
+      body: `${taskName} is due tomorrow!`,
+      data: { taskId, householdId },
       sound: true,
     },
     trigger: {
@@ -279,6 +263,14 @@ export async function getNotificationPrefs(
       snoozeDuration:
         (data?.snoozeDuration as SnoozeDuration | undefined) ??
         DEFAULT_PREFS.snoozeDuration,
+      reminderHour:
+        typeof data?.reminderHour === 'number'
+          ? data.reminderHour
+          : DEFAULT_PREFS.reminderHour,
+      reminderMinute:
+        typeof data?.reminderMinute === 'number'
+          ? data.reminderMinute
+          : DEFAULT_PREFS.reminderMinute,
     };
   } catch (e) {
     console.warn('[notifications] getPrefs failed:', e);
@@ -294,5 +286,7 @@ export async function setNotificationPrefs(
     reminderEnabled: prefs.enabled,
     reminderTiming: prefs.timing,
     snoozeDuration: prefs.snoozeDuration,
+    reminderHour: prefs.reminderHour,
+    reminderMinute: prefs.reminderMinute,
   });
 }

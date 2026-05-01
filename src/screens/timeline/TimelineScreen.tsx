@@ -1,5 +1,8 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
+  Animated,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   View,
   Text,
   ScrollView,
@@ -15,13 +18,14 @@ import {
   cancelAllReminders,
   getNotificationPrefs,
   scheduleAllTaskReminders,
-  sendTestNotification,
 } from '../../services/notificationService';
 import { seedDummyTasks } from '../../utils/seedTasks';
 import { Task } from '../../types/models';
 import UserAvatar from '../../components/UserAvatar';
+import FAB from '../../components/FAB';
 import { getFirstName } from '../../utils/nameUtils';
 import { Colors } from '../../constants/colors';
+import { Typography } from '../../constants/typography';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 type Urgency = 'overdue' | 'soon' | 'amber' | 'mid' | 'far' | 'completed';
@@ -72,6 +76,7 @@ function TaskCard({
   const completed = task.completedToday;
   const palette = completed ? URGENCY.completed : URGENCY[urgencyFor(days)];
   const label = completed ? '✅ Completed today' : dueLabel(days);
+  const isOverdue = !completed && days < 0;
 
   const assignedToMe = !!task.assignedTo && task.assignedTo === currentUserId;
   const assignedToOther = !!task.assignedTo && task.assignedTo !== currentUserId;
@@ -86,6 +91,9 @@ function TaskCard({
       onPress={onPress}
       activeOpacity={0.7}
     >
+      {isOverdue ? (
+        <View style={styles.overdueOverlay} pointerEvents="none" />
+      ) : null}
       <View style={styles.cardDueRow}>
         <Text style={[styles.dueLabel, { color: palette.color }]}>{label}</Text>
       </View>
@@ -130,36 +138,32 @@ function SectionHeader({
   expanded,
   onToggle,
 }: SectionHeaderProps) {
-  const headerStyle =
+  const pillBg =
     variant === 'attention'
-      ? [styles.sectionHeader, styles.headerAttention]
+      ? styles.pillAttention
       : variant === 'soon'
-        ? [styles.sectionHeader, styles.headerSoon]
-        : [styles.sectionHeader, styles.headerLater];
-  const textStyle =
-    variant === 'attention'
-      ? styles.headerAttentionText
-      : variant === 'soon'
-        ? styles.headerSoonText
-        : styles.headerLaterText;
+        ? styles.pillSoon
+        : styles.pillLater;
 
   const content = (
-    <View style={styles.sectionHeaderRow}>
-      <Text style={[styles.sectionHeaderText, textStyle]}>
-        {title}
-        {count > 0 ? ` (${count})` : ''}
-      </Text>
+    <View style={styles.sectionRow}>
+      <View style={[styles.sectionPill, pillBg]}>
+        <Text style={styles.sectionPillText}>
+          {title}
+          {count > 0 ? ` • ${count}` : ''}
+        </Text>
+      </View>
       {collapsible ? (
-        <Text style={[styles.chevron, textStyle]}>{expanded ? '▼' : '▶'}</Text>
+        <Text style={styles.chevron}>{expanded ? '▼' : '▶'}</Text>
       ) : null}
     </View>
   );
 
-  if (!collapsible) return <View style={headerStyle}>{content}</View>;
+  if (!collapsible) return <View style={styles.sectionWrap}>{content}</View>;
 
   return (
     <TouchableOpacity
-      style={headerStyle}
+      style={styles.sectionWrap}
       onPress={onToggle}
       activeOpacity={0.7}
     >
@@ -180,6 +184,23 @@ export default function TimelineScreen() {
   const [showSoon, setShowSoon] = useState(false);
   const [showLater, setShowLater] = useState(false);
   const [filter, setFilter] = useState<'all' | 'mine'>('all');
+
+  const fabScale = useRef(new Animated.Value(1)).current;
+  const lastScrollY = useRef(0);
+  const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const y = e.nativeEvent.contentOffset.y;
+    const goingDown = y > lastScrollY.current + 1;
+    const goingUp = y < lastScrollY.current - 1;
+    lastScrollY.current = y;
+    if (goingDown || goingUp) {
+      Animated.spring(fabScale, {
+        toValue: goingDown ? 0.85 : 1,
+        useNativeDriver: true,
+        tension: 80,
+        friction: 8,
+      }).start();
+    }
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -203,7 +224,9 @@ export default function TimelineScreen() {
                 await scheduleAllTaskReminders(
                   result,
                   householdId,
-                  prefs.timing
+                  prefs.timing,
+                  prefs.reminderHour,
+                  prefs.reminderMinute
                 );
               } else {
                 await cancelAllReminders();
@@ -288,16 +311,8 @@ export default function TimelineScreen() {
         <View style={styles.headerSide}>
           <UserAvatar />
         </View>
-        <Text style={styles.title}>TaskMate</Text>
-        <View style={[styles.headerSide, styles.headerSideRight]}>
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => navigation.navigate('AddTask')}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.addButtonText}>+</Text>
-          </TouchableOpacity>
-        </View>
+        <Text style={styles.title}>Tasks</Text>
+        <View style={[styles.headerSide, styles.headerSideRight]} />
       </View>
     </>
   );
@@ -361,18 +376,11 @@ export default function TimelineScreen() {
   return (
     <View style={styles.container}>
       {Header}
-      <ScrollView contentContainerStyle={styles.listContent}>
-        {/* TEMP: remove after notifications confirmed working */}
-        <TouchableOpacity
-          style={styles.testButton}
-          onPress={() => {
-            void sendTestNotification();
-          }}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.testButtonText}>🔔 Test Notification</Text>
-        </TouchableOpacity>
-
+      <ScrollView
+        contentContainerStyle={styles.listContent}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+      >
         <View style={styles.filterRow}>
           <TouchableOpacity
             style={[
@@ -411,7 +419,7 @@ export default function TimelineScreen() {
         </View>
 
         <SectionHeader
-          title="⚠️ Needs Attention"
+          title="NEEDS ATTENTION"
           count={buckets.needsAttention.length}
           variant="attention"
           collapsible
@@ -441,7 +449,7 @@ export default function TimelineScreen() {
         {buckets.comingUpSoon.length > 0 && (
           <>
             <SectionHeader
-              title="📅 Coming Up Soon"
+              title="COMING UP SOON"
               count={buckets.comingUpSoon.length}
               variant="soon"
               collapsible
@@ -465,7 +473,7 @@ export default function TimelineScreen() {
         {buckets.comingUpLater.length > 0 && (
           <>
             <SectionHeader
-              title="🔮 Coming Up Later"
+              title="COMING UP LATER"
               count={buckets.comingUpLater.length}
               variant="later"
               collapsible
@@ -486,6 +494,10 @@ export default function TimelineScreen() {
           </>
         )}
       </ScrollView>
+      <FAB
+        onPress={() => navigation.navigate('AddTask')}
+        scrollScale={fabScale}
+      />
     </View>
   );
 }
@@ -507,33 +519,20 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.headerBackground,
   },
   headerSide: {
-    width: 36,
+    width: 40,
     flexDirection: 'row',
     alignItems: 'center',
   },
   headerSideRight: {
     justifyContent: 'flex-end',
+    gap: 8,
   },
   title: {
     flex: 1,
-    fontSize: 22,
+    color: '#FFFFFF',
+    fontSize: 20,
     fontWeight: '700',
-    color: Colors.textOnDark,
     textAlign: 'center',
-  },
-  addButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  addButtonText: {
-    color: Colors.textOnDark,
-    fontSize: 22,
-    fontWeight: '600',
-    lineHeight: 24,
   },
   center: {
     flex: 1,
@@ -582,47 +581,41 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: 16,
-    paddingBottom: 32,
+    paddingBottom: 100,
   },
-  sectionHeader: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    marginTop: 16,
+  sectionWrap: {
+    marginTop: 20,
     marginBottom: 8,
   },
-  sectionHeaderRow: {
+  sectionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  sectionHeaderText: {
-    fontSize: 13,
+  sectionPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  sectionPillText: {
+    fontSize: 11,
     fontWeight: '700',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
+    color: '#FFFFFF',
+    letterSpacing: 1,
+  },
+  pillAttention: {
+    backgroundColor: Colors.urgencyRed,
+  },
+  pillSoon: {
+    backgroundColor: Colors.primary,
+  },
+  pillLater: {
+    backgroundColor: Colors.textMuted,
   },
   chevron: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
-  },
-  headerAttention: {
-    backgroundColor: Colors.needsAttentionBg,
-  },
-  headerAttentionText: {
-    color: Colors.needsAttentionText,
-  },
-  headerSoon: {
-    backgroundColor: Colors.comingSoonBg,
-  },
-  headerSoonText: {
-    color: Colors.comingSoonText,
-  },
-  headerLater: {
-    backgroundColor: Colors.comingLaterBg,
-  },
-  headerLaterText: {
-    color: Colors.comingLaterText,
+    color: Colors.textMuted,
   },
   emptyAttention: {
     paddingVertical: 24,
@@ -634,19 +627,23 @@ const styles = StyleSheet.create({
     color: Colors.urgencyGreen,
   },
   card: {
-    borderRadius: 12,
+    borderRadius: 16,
     borderLeftWidth: 4,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    padding: 14,
     marginBottom: 12,
-    shadowColor: Colors.shadow,
+    shadowColor: '#000',
     shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+    overflow: 'hidden',
   },
   cardCompleted: {
     opacity: 0.7,
+  },
+  overdueOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(229,62,62,0.03)',
   },
   cardDueRow: {
     flexDirection: 'row',
@@ -674,8 +671,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   taskName: {
-    fontSize: 17,
-    fontWeight: '700',
+    ...Typography.bodyBold,
     color: Colors.textPrimary,
     marginBottom: 2,
   },
@@ -701,22 +697,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     paddingTop: 12,
-  },
-  testButton: {
-    marginTop: 12,
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: Colors.urgencyAmber,
-    backgroundColor: '#FFFBEB',
-  },
-  testButtonText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: Colors.urgencyAmber,
-    letterSpacing: 0.4,
   },
   filterPill: {
     paddingHorizontal: 14,

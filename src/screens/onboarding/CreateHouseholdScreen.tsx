@@ -16,6 +16,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useAppStore } from '../../stores/appStore';
 import { createHousehold } from '../../services/householdService';
 import { joinHousehold } from '../../services/inviteService';
+import { StatusBar } from 'expo-status-bar';
 import { Colors } from '../../constants/colors';
 
 export default function CreateHouseholdScreen() {
@@ -99,6 +100,8 @@ export default function CreateHouseholdScreen() {
   };
 
   return (
+    <>
+    <StatusBar style="dark" />
     <KeyboardAvoidingView
       style={styles.flex}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -191,6 +194,7 @@ export default function CreateHouseholdScreen() {
         </View>
       </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
+    </>
   );
 }
 

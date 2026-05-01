@@ -17,6 +17,7 @@ import {
 } from '@react-navigation/native';
 import { addDays, format } from 'date-fns';
 import {
+  deleteProduct,
   flagPurchasePending,
   getProduct,
   getProductUsagesForTask,
@@ -33,6 +34,8 @@ import {
 } from '../../types/models';
 import InventoryBar from '../../components/InventoryBar';
 import UpdateStockSheet from '../../components/UpdateStockSheet';
+import ScreenHeader from '../../components/ScreenHeader';
+import DeleteRowButton from '../../components/DeleteRowButton';
 import { useAuth } from '../../hooks/useAuth';
 import { Colors } from '../../constants/colors';
 
@@ -149,6 +152,34 @@ export default function ProductDetailScreen() {
     }
   };
 
+  const handleDelete = () => {
+    if (!product) return;
+    Alert.alert(
+      `Delete ${product.name}?`,
+      'It will be removed from all tasks that use it. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteProduct(householdId, product.id);
+              navigation.popToTop();
+              navigation.navigate('Main', { screen: 'Supplies' });
+            } catch (e) {
+              const err = e as { message?: string };
+              Alert.alert(
+                'Delete failed',
+                err.message ?? 'Unable to delete supply'
+              );
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleBuy = async () => {
     if (!product) return;
     try {
@@ -213,20 +244,18 @@ export default function ProductDetailScreen() {
 
   return (
     <>
+      <ScreenHeader
+        title=""
+        leftLabel="Supplies"
+        rightLabel="Edit"
+        rightTone="white"
+        onRightPress={() => navigation.navigate('EditProduct', { product })}
+      />
       <ScrollView
         style={styles.screen}
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-      <View style={styles.headerRow}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.cancel}>Back</Text>
-        </TouchableOpacity>
-      </View>
-
       <View style={styles.titleRow}>
         <Text style={styles.title} numberOfLines={2}>
           {product.name}
@@ -346,13 +375,10 @@ export default function ProductDetailScreen() {
         <Text style={styles.primaryButtonText}>Log Purchase</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity
-        style={styles.secondaryButton}
-        onPress={() => navigation.navigate('EditProduct', { product })}
-        activeOpacity={0.7}
-      >
-        <Text style={styles.secondaryButtonText}>Edit Product</Text>
-      </TouchableOpacity>
+      <DeleteRowButton
+        label="Delete from Supply List"
+        onPress={handleDelete}
+      />
       </ScrollView>
       <UpdateStockSheet
         visible={stockSheetVisible}
@@ -370,7 +396,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.screenBackground,
   },
   content: {
-    paddingTop: 56,
+    paddingTop: 16,
     paddingBottom: 64,
     paddingHorizontal: 16,
   },
@@ -380,14 +406,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
-  },
-  headerRow: {
-    marginBottom: 8,
-  },
-  cancel: {
-    color: Colors.primary,
-    fontSize: 16,
-    fontWeight: '600',
   },
   titleRow: {
     flexDirection: 'row',
@@ -545,21 +563,6 @@ const styles = StyleSheet.create({
     color: Colors.textOnDark,
     fontSize: 16,
     fontWeight: '700',
-  },
-  secondaryButton: {
-    height: 48,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.borderDark,
-    backgroundColor: Colors.cardBackground,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 12,
-  },
-  secondaryButtonText: {
-    color: Colors.textPrimary,
-    fontSize: 16,
-    fontWeight: '600',
   },
   errorText: {
     color: Colors.error,

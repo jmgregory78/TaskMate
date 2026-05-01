@@ -109,6 +109,7 @@ export interface Task {
   assignedToName: string | null;
   assignedAt: Date | null;
   assignedBy: string | null;
+  reminderDaysBefore: number;
 }
 
 export interface Product {
@@ -175,6 +176,16 @@ export interface PurchaseLog {
   containerSize: number;
   containerUnit: string;
   totalAdded: number;
+}
+
+export interface FeedbackItem {
+  id: string;
+  userId: string;
+  userEmail: string;
+  subject: string;
+  message: string;
+  submittedAt: Date;
+  read: boolean;
 }
 
 export function stockPercent(product: Product): number {

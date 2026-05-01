@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   AppState,
   AppStateStatus,
+  Modal,
   Text,
   View,
   StyleSheet,
@@ -10,29 +11,27 @@ import {
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import Svg, { Circle, Path } from 'react-native-svg';
 import * as Notifications from 'expo-notifications';
 import { useAuth } from '../hooks/useAuth';
 import { useAppStore } from '../stores/appStore';
-import { getUserHousehold } from '../services/householdService';
 import {
-  completeTask,
-  getTasks,
-  resetCompletedToday,
-} from '../services/taskService';
+  getUserHousehold,
+  hasCompletedOnboarding,
+  markOnboardingComplete,
+} from '../services/householdService';
+import { getFirstName } from '../utils/nameUtils';
+import OnboardingScreen from '../screens/onboarding/OnboardingScreen';
+import { resetCompletedToday } from '../services/taskService';
 import {
   clearPurchasePending,
   getPendingPurchases,
 } from '../services/productService';
-import {
-  computeSnoozeTriggerDate,
-  getNotificationPrefs,
-  registerForPushNotifications,
-  registerNotificationCategories,
-  scheduleAllTaskReminders,
-} from '../services/notificationService';
+import { registerForPushNotifications } from '../services/notificationService';
 import LoginScreen from '../screens/auth/LoginScreen';
 import SignUpScreen from '../screens/auth/SignUpScreen';
 import CreateHouseholdScreen from '../screens/onboarding/CreateHouseholdScreen';
+import HomeScreen from '../screens/home/HomeScreen';
 import TimelineScreen from '../screens/timeline/TimelineScreen';
 import AddTaskScreen from '../screens/timeline/AddTaskScreen';
 import EditTaskScreen from '../screens/timeline/EditTaskScreen';
@@ -44,6 +43,8 @@ import SuppliesScreen from '../screens/supplies/SuppliesScreen';
 import CreateProductScreen from '../screens/supplies/CreateProductScreen';
 import EditProductScreen from '../screens/supplies/EditProductScreen';
 import HouseholdSettingsScreen from '../screens/household/HouseholdSettingsScreen';
+import AppGuideScreen from '../screens/appguide/AppGuideScreen';
+import FeedbackScreen from '../screens/appguide/FeedbackScreen';
 import PendingPurchasePrompt, {
   PendingItem,
 } from '../components/PendingPurchasePrompt';
@@ -62,6 +63,7 @@ export type OnboardingStackParamList = {
 };
 
 export type MainTabsParamList = {
+  Home: undefined;
   Tasks: undefined;
   Supplies: undefined;
 };
@@ -77,6 +79,8 @@ export type AppStackParamList = {
   CreateProduct: undefined;
   EditProduct: { product: Product };
   HouseholdSettings: undefined;
+  AppGuide: undefined;
+  Feedback: undefined;
 };
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
@@ -84,22 +88,125 @@ const OnboardingStack = createNativeStackNavigator<OnboardingStackParamList>();
 const AppStack = createNativeStackNavigator<AppStackParamList>();
 const Tabs = createBottomTabNavigator<MainTabsParamList>();
 
-const TAB_ICONS: Record<string, string> = {
-  Tasks: '📋',
-  Supplies: '🛒',
-};
+const TAB_ICON_SIZE = 32;
+const TAB_STROKE = 2;
+const tabIconStyle = { marginBottom: 8 } as const;
+
+function HomeIcon({ color }: { color: string }) {
+  return (
+    <Svg
+      width={TAB_ICON_SIZE}
+      height={TAB_ICON_SIZE}
+      viewBox="0 0 24 24"
+      fill="none"
+      style={tabIconStyle}
+    >
+      <Path
+        d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"
+        stroke={color}
+        strokeWidth={TAB_STROKE}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M9 21V12h6v9"
+        stroke={color}
+        strokeWidth={TAB_STROKE}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+function TasksIcon({ color }: { color: string }) {
+  return (
+    <Svg
+      width={TAB_ICON_SIZE}
+      height={TAB_ICON_SIZE}
+      viewBox="0 0 24 24"
+      fill="none"
+      style={tabIconStyle}
+    >
+      <Path
+        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"
+        stroke={color}
+        strokeWidth={TAB_STROKE}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+        stroke={color}
+        strokeWidth={TAB_STROKE}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M9 12l2 2 4-4"
+        stroke={color}
+        strokeWidth={TAB_STROKE}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M9 17h6"
+        stroke={color}
+        strokeWidth={TAB_STROKE}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+function SuppliesIcon({ color }: { color: string }) {
+  return (
+    <Svg
+      width={TAB_ICON_SIZE}
+      height={TAB_ICON_SIZE}
+      viewBox="0 0 24 24"
+      fill="none"
+      style={tabIconStyle}
+    >
+      <Path
+        d="M6 2H3"
+        stroke={color}
+        strokeWidth={TAB_STROKE}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M3 2l2.5 11.5a2 2 0 002 1.5h9a2 2 0 001.96-1.608L20 6H6"
+        stroke={color}
+        strokeWidth={TAB_STROKE}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Circle cx="9" cy="20" r="1.5" stroke={color} strokeWidth={TAB_STROKE} />
+      <Circle cx="17" cy="20" r="1.5" stroke={color} strokeWidth={TAB_STROKE} />
+    </Svg>
+  );
+}
+
+function tabIconFor(routeName: string, color: string): React.ReactNode {
+  if (routeName === 'Home') return <HomeIcon color={color} />;
+  if (routeName === 'Tasks') return <TasksIcon color={color} />;
+  if (routeName === 'Supplies') return <SuppliesIcon color={color} />;
+  return null;
+}
 
 function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   return (
     <View style={styles.tabBar}>
       {state.routes.map((route, index) => {
         const isFocused = state.index === index;
-        const icon = TAB_ICONS[route.name] ?? '•';
+        const color = isFocused ? Colors.primary : '#FFFFFF';
         return (
           <TouchableOpacity
             key={route.key}
             accessibilityRole="button"
             accessibilityState={isFocused ? { selected: true } : {}}
+            accessibilityLabel={route.name}
             onPress={() => {
               const event = navigation.emit({
                 type: 'tabPress',
@@ -113,15 +220,7 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
             style={styles.tabItem}
             activeOpacity={0.7}
           >
-            <Text style={styles.tabIcon}>{icon}</Text>
-            <Text
-              style={[
-                styles.tabLabel,
-                isFocused ? styles.tabLabelActive : styles.tabLabelInactive,
-              ]}
-            >
-              {route.name}
-            </Text>
+            {tabIconFor(route.name, color)}
           </TouchableOpacity>
         );
       })}
@@ -135,6 +234,7 @@ function MainTabs() {
       tabBar={(props) => <CustomTabBar {...props} />}
       screenOptions={{ headerShown: false }}
     >
+      <Tabs.Screen name="Home" component={HomeScreen} />
       <Tabs.Screen name="Tasks" component={TimelineScreen} />
       <Tabs.Screen name="Supplies" component={SuppliesScreen} />
     </Tabs.Navigator>
@@ -145,7 +245,38 @@ export default function RootNavigator() {
   const { user, loading: authLoading } = useAuth();
   const currentHouseholdId = useAppStore((s) => s.currentHouseholdId);
   const setCurrentHouseholdId = useAppStore((s) => s.setCurrentHouseholdId);
+  const showOnboarding = useAppStore((s) => s.showOnboarding);
+  const setShowOnboarding = useAppStore((s) => s.setShowOnboarding);
   const [checkedForUid, setCheckedForUid] = useState<string | null>(null);
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
+
+  useEffect(() => {
+    if (!user?.uid || !currentHouseholdId) {
+      setOnboardingChecked(false);
+      return;
+    }
+    if (onboardingChecked) return;
+    let cancelled = false;
+    hasCompletedOnboarding(user.uid)
+      .then((done) => {
+        if (cancelled) return;
+        if (!done) setShowOnboarding(true);
+      })
+      .catch((e) => {
+        console.warn('[RootNavigator] onboarding check failed:', e);
+      })
+      .finally(() => {
+        if (!cancelled) setOnboardingChecked(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    user?.uid,
+    currentHouseholdId,
+    onboardingChecked,
+    setShowOnboarding,
+  ]);
 
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
   const [pendingIndex, setPendingIndex] = useState(0);
@@ -205,74 +336,16 @@ export default function RootNavigator() {
     fetchPending(currentHouseholdId);
   }, [currentHouseholdId, pendingFetchedFor]);
 
-  // Register notification categories on mount (independent of auth state)
-  // so the action buttons exist before any reminder fires.
-  useEffect(() => {
-    void registerNotificationCategories();
-  }, []);
-
-  // Register for push notifications + handle responses (tap, Complete, Snooze).
+  // Register for push notifications + handle taps to open the task detail.
   useEffect(() => {
     if (!user?.uid || !currentHouseholdId) return;
     void registerForPushNotifications(user.uid);
 
     const sub = Notifications.addNotificationResponseReceivedListener(
-      async (response) => {
+      (response) => {
         const data = response.notification.request.content.data ?? {};
         const taskId = typeof data.taskId === 'string' ? data.taskId : null;
-        const dataHouseholdId =
-          typeof data.householdId === 'string' ? data.householdId : null;
-        const hhId = dataHouseholdId || currentHouseholdId;
-        const actionId = response.actionIdentifier;
-
-        if (!taskId || !hhId) return;
-
-        if (actionId === 'COMPLETE') {
-          try {
-            await completeTask(
-              hhId,
-              taskId,
-              user.displayName ?? user.email ?? user.uid
-            );
-            const updatedTasks = await getTasks(hhId);
-            const prefs = await getNotificationPrefs(user.uid);
-            if (prefs.enabled) {
-              await scheduleAllTaskReminders(updatedTasks, hhId, prefs.timing);
-            }
-          } catch (e) {
-            console.warn('[Notifications] background complete failed:', e);
-          }
-          return;
-        }
-
-        if (actionId === 'SNOOZE') {
-          try {
-            const prefs = await getNotificationPrefs(user.uid);
-            const triggerDate = computeSnoozeTriggerDate(prefs.snoozeDuration);
-            await Notifications.cancelScheduledNotificationAsync(
-              response.notification.request.identifier
-            );
-            const original = response.notification.request.content;
-            await Notifications.scheduleNotificationAsync({
-              content: {
-                title: original.title ?? 'Task reminder',
-                body: 'Snoozed reminder — this task is still due!',
-                data: { taskId, householdId: hhId },
-                sound: true,
-                categoryIdentifier: 'TASK_REMINDER',
-              },
-              trigger: {
-                type: Notifications.SchedulableTriggerInputTypes.DATE,
-                date: triggerDate,
-              },
-            });
-          } catch (e) {
-            console.warn('[Notifications] snooze failed:', e);
-          }
-          return;
-        }
-
-        // Default tap → navigate to task detail
+        if (!taskId || taskId === 'test') return;
         if (navigationRef.current) {
           navigationRef.current.navigate('TaskDetail', { taskId });
         }
@@ -282,7 +355,7 @@ export default function RootNavigator() {
     return () => {
       sub.remove();
     };
-  }, [user?.uid, user?.email, user?.displayName, currentHouseholdId]);
+  }, [user?.uid, currentHouseholdId]);
 
   useEffect(() => {
     const handleAppStateChange = (next: AppStateStatus) => {
@@ -388,6 +461,8 @@ export default function RootNavigator() {
             name="HouseholdSettings"
             component={HouseholdSettingsScreen}
           />
+          <AppStack.Screen name="AppGuide" component={AppGuideScreen} />
+          <AppStack.Screen name="Feedback" component={FeedbackScreen} />
         </AppStack.Navigator>
       );
     }
@@ -407,6 +482,31 @@ export default function RootNavigator() {
         />
       ) : null}
       <SplashScreen visible={splashVisible} />
+      <Modal
+        visible={
+          !!user &&
+          !!currentHouseholdId &&
+          showOnboarding &&
+          !splashVisible
+        }
+        animationType="slide"
+        transparent={false}
+      >
+        {user && currentHouseholdId ? (
+          <OnboardingScreen
+            firstName={getFirstName(user.displayName ?? user.email)}
+            onComplete={() => {
+              void markOnboardingComplete(user.uid).catch((e) => {
+                console.warn(
+                  '[RootNavigator] markOnboardingComplete failed:',
+                  e
+                );
+              });
+              setShowOnboarding(false);
+            }}
+          />
+        ) : null}
+      </Modal>
     </View>
   );
 }
@@ -417,30 +517,14 @@ const styles = StyleSheet.create({
   },
   tabBar: {
     flexDirection: 'row',
-    height: 70,
-    paddingTop: 12,
-    paddingBottom: 12,
-    backgroundColor: Colors.tabBarBackground,
+    height: 77,
+    paddingTop: 10,
+    paddingBottom: 18,
+    backgroundColor: Colors.headerBackground,
   },
   tabItem: {
     flex: 1,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  tabIcon: {
-    fontSize: 18,
-    marginRight: 6,
-  },
-  tabLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    letterSpacing: 0,
-  },
-  tabLabelActive: {
-    color: Colors.primary,
-  },
-  tabLabelInactive: {
-    color: Colors.textOnDarkMuted,
   },
 });

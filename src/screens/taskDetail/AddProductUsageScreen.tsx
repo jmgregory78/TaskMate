@@ -13,6 +13,7 @@ import {
   useRoute,
 } from '@react-navigation/native';
 import ScreenWrapper from '../../components/ScreenWrapper';
+import ScreenHeader from '../../components/ScreenHeader';
 import InventoryBar from '../../components/InventoryBar';
 import { useAuth } from '../../hooks/useAuth';
 import {
@@ -22,6 +23,7 @@ import {
   getProductUsagesForTask,
 } from '../../services/productService';
 import { Product, TaskProductUsage } from '../../types/models';
+import { StatusBar } from 'expo-status-bar';
 import { Colors } from '../../constants/colors';
 
 type Route = RouteProp<
@@ -199,26 +201,21 @@ export default function AddProductUsageScreen() {
   };
 
   const renderHeader = (title: string) => (
-    <View style={styles.headerRow}>
-      <TouchableOpacity
-        onPress={() =>
-          mode === 'search' ? navigation.goBack() : goBackToSearch()
-        }
-        activeOpacity={0.7}
-      >
-        <Text style={styles.cancel}>
-          {mode === 'search' ? 'Cancel' : 'Back'}
-        </Text>
-      </TouchableOpacity>
-      <Text style={styles.heading}>{title}</Text>
-      <View style={styles.headerSpacer} />
-    </View>
+    <ScreenHeader
+      title={title}
+      leftLabel={mode === 'search' ? 'Cancel' : 'Back'}
+      onLeftPress={() =>
+        mode === 'search' ? navigation.goBack() : goBackToSearch()
+      }
+    />
   );
 
   if (mode === 'edit-existing' && selectedProduct) {
     return (
+      <>
+      <StatusBar style="dark" />
+      {renderHeader('Add to Task')}
       <ScreenWrapper contentContainerStyle={styles.content}>
-        {renderHeader('Add to Task')}
 
         <View style={styles.productPreview}>
           <Text style={styles.productPreviewName}>{selectedProduct.name}</Text>
@@ -255,13 +252,16 @@ export default function AddProductUsageScreen() {
           )}
         </TouchableOpacity>
       </ScreenWrapper>
+      </>
     );
   }
 
   if (mode === 'create-new') {
     return (
+      <>
+      <StatusBar style="dark" />
+      {renderHeader('New Supply')}
       <ScreenWrapper contentContainerStyle={styles.content}>
-        {renderHeader('New Supply')}
 
         <Text style={styles.label}>Product name</Text>
         <TextInput
@@ -360,12 +360,15 @@ export default function AddProductUsageScreen() {
           )}
         </TouchableOpacity>
       </ScreenWrapper>
+      </>
     );
   }
 
   return (
+    <>
+    <StatusBar style="dark" />
+    {renderHeader('Add Supply')}
     <ScreenWrapper contentContainerStyle={styles.content}>
-      {renderHeader('Add Supply')}
 
       <TextInput
         style={styles.input}
@@ -429,6 +432,7 @@ export default function AddProductUsageScreen() {
         </View>
       )}
     </ScreenWrapper>
+    </>
   );
 }
 

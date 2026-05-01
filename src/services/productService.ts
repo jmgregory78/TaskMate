@@ -204,6 +204,30 @@ export async function deleteProduct(
   householdId: string,
   productId: string
 ): Promise<void> {
+  // 1. Find every task in this household and delete any productUsage doc
+  //    that references this product.
+  const tasksSnap = await getDocs(
+    collection(db, 'households', householdId, 'tasks')
+  );
+  await Promise.all(
+    tasksSnap.docs.map(async (taskDoc) => {
+      const usagesSnap = await getDocs(
+        query(
+          productUsagesCollection(householdId, taskDoc.id),
+          where('productId', '==', productId)
+        )
+      );
+      await Promise.all(usagesSnap.docs.map((u) => deleteDoc(u.ref)));
+    })
+  );
+
+  // 2. Delete every entry in the product's purchases subcollection.
+  const purchasesSnap = await getDocs(
+    purchasesCollection(householdId, productId)
+  );
+  await Promise.all(purchasesSnap.docs.map((p) => deleteDoc(p.ref)));
+
+  // 3. Delete the product doc itself.
   await deleteDoc(productDoc(householdId, productId));
 }
 

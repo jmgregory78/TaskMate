@@ -11,7 +11,6 @@ import {
   View,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { format } from 'date-fns';
 import {
   collection,
@@ -37,6 +36,7 @@ import {
   HouseholdMember,
 } from '../../types/models';
 import InviteSheet from '../../components/InviteSheet';
+import ScreenHeader from '../../components/ScreenHeader';
 import { getFirstName } from '../../utils/nameUtils';
 import { Colors } from '../../constants/colors';
 
@@ -342,18 +342,7 @@ export default function HouseholdSettingsScreen() {
   if (loading || !householdId) {
     return (
       <View style={styles.screen}>
-        <SafeAreaView edges={['top']} style={styles.safeTop} />
-        <View style={styles.header}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            activeOpacity={0.7}
-            style={styles.headerSide}
-          >
-            <Text style={styles.backLink}>← Back</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Household Settings</Text>
-          <View style={styles.headerSide} />
-        </View>
+        <ScreenHeader title="" leftLabel="Back" />
         <View style={styles.center}>
           <ActivityIndicator size="large" color={Colors.primary} />
         </View>
@@ -363,18 +352,7 @@ export default function HouseholdSettingsScreen() {
 
   return (
     <View style={styles.screen}>
-      <SafeAreaView edges={['top']} style={styles.safeTop} />
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          activeOpacity={0.7}
-          style={styles.headerSide}
-        >
-          <Text style={styles.backLink}>← Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Household Settings</Text>
-        <View style={styles.headerSide} />
-      </View>
+      <ScreenHeader title="" leftLabel="Back" />
 
       {error ? (
         <View style={styles.center}>

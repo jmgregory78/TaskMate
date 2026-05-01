@@ -9,7 +9,7 @@ export default function App() {
     <SafeAreaProvider>
       <NavigationContainer ref={navigationRef}>
         <RootNavigator />
-        <StatusBar style="auto" />
+        <StatusBar style="light" />
       </NavigationContainer>
     </SafeAreaProvider>
   );

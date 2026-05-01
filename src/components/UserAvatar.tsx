@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
-  Dimensions,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -15,11 +14,20 @@ import {
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
-import { updatePassword, updateProfile } from 'firebase/auth';
+import {
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  updatePassword,
+  updateProfile,
+} from 'firebase/auth';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { auth } from '../config/firebase';
 import { useAuth } from '../hooks/useAuth';
 import { useAppStore } from '../stores/appStore';
+import { getHouseholdMembers } from '../services/inviteService';
+import { getUnreadFeedbackCount } from '../services/feedbackService';
 import {
   cancelAllReminders,
   getNotificationPrefs,
@@ -52,7 +60,37 @@ export default function UserAvatar({
   fontSize = 14,
 }: AvatarProps) {
   const { user } = useAuth();
+  const householdId = useAppStore((s) => s.currentHouseholdId);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [showDisplayName, setShowDisplayName] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showNotifPrefs, setShowNotifPrefs] = useState(false);
+  const [unreadFeedback, setUnreadFeedback] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!user?.uid || !householdId) {
+      setUnreadFeedback(0);
+      return;
+    }
+    void (async () => {
+      try {
+        const members = await getHouseholdMembers(householdId);
+        const me = members.find((m) => m.userId === user.uid);
+        if (!me || me.role !== 'owner') {
+          if (!cancelled) setUnreadFeedback(0);
+          return;
+        }
+        const count = await getUnreadFeedbackCount();
+        if (!cancelled) setUnreadFeedback(count);
+      } catch (e) {
+        console.warn('[UserAvatar] feedback badge load failed:', e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.uid, householdId]);
 
   if (!user) return null;
   const letters = initialsFor(user.displayName, user.email);
@@ -72,41 +110,87 @@ export default function UserAvatar({
         ]}
       >
         <Text style={[styles.avatarText, { fontSize }]}>{letters}</Text>
+        {unreadFeedback > 0 ? (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>
+              {unreadFeedback > 9 ? '9+' : unreadFeedback}
+            </Text>
+          </View>
+        ) : null}
       </TouchableOpacity>
-      <ProfileSheet
+      <ProfileDropdown
         visible={sheetOpen}
         onClose={() => setSheetOpen(false)}
+        onShowDisplayName={() => {
+          setSheetOpen(false);
+          setShowDisplayName(true);
+        }}
+        onShowPassword={() => {
+          setSheetOpen(false);
+          setShowPassword(true);
+        }}
+        onShowNotifPrefs={() => {
+          setSheetOpen(false);
+          setShowNotifPrefs(true);
+        }}
+      />
+      <ChangeDisplayNameModal
+        visible={showDisplayName}
+        onClose={() => setShowDisplayName(false)}
+      />
+      <ChangePasswordModal
+        visible={showPassword}
+        onClose={() => setShowPassword(false)}
+      />
+      <NotificationPreferencesModal
+        visible={showNotifPrefs}
+        onClose={() => setShowNotifPrefs(false)}
       />
     </>
   );
 }
 
-interface SheetProps {
+interface DropdownProps {
   visible: boolean;
   onClose: () => void;
+  onShowDisplayName: () => void;
+  onShowPassword: () => void;
+  onShowNotifPrefs: () => void;
 }
 
-const SCREEN_HEIGHT = Dimensions.get('window').height;
-
-function ProfileSheet({ visible, onClose }: SheetProps) {
+function ProfileDropdown({
+  visible,
+  onClose,
+  onShowDisplayName,
+  onShowPassword,
+  onShowNotifPrefs,
+}: DropdownProps) {
   const { user, signOut } = useAuth();
   const navigation = useNavigation<any>();
-  const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const insets = useSafeAreaInsets();
+  const dropdownAnim = useRef(new Animated.Value(0)).current;
   const [mounted, setMounted] = useState(visible);
-  const [showDisplayName, setShowDisplayName] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showNotifPrefs, setShowNotifPrefs] = useState(false);
 
   useEffect(() => {
-    if (visible) setMounted(true);
-    Animated.timing(translateY, {
-      toValue: visible ? 0 : SCREEN_HEIGHT,
-      duration: 250,
-      useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (!visible && finished) setMounted(false);
-    });
-  }, [visible, translateY]);
+    if (visible) {
+      setMounted(true);
+      Animated.spring(dropdownAnim, {
+        toValue: 1,
+        tension: 65,
+        friction: 10,
+        useNativeDriver: true,
+      }).start();
+    } else if (mounted) {
+      Animated.timing(dropdownAnim, {
+        toValue: 0,
+        duration: 180,
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (finished) setMounted(false);
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
 
   if (!mounted || !user) return null;
 
@@ -120,6 +204,18 @@ function ProfileSheet({ visible, onClose }: SheetProps) {
     }
   };
 
+  const dropdownTransform = {
+    opacity: dropdownAnim,
+    transform: [
+      {
+        translateY: dropdownAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [-12, 0],
+        }),
+      },
+    ],
+  };
+
   return (
     <Modal
       visible
@@ -127,64 +223,76 @@ function ProfileSheet({ visible, onClose }: SheetProps) {
       animationType="none"
       onRequestClose={onClose}
     >
-      <View style={styles.fill}>
-        <TouchableWithoutFeedback onPress={onClose}>
-          <View style={styles.overlay} />
-        </TouchableWithoutFeedback>
-        <Animated.View
-          style={[styles.sheet, { transform: [{ translateY }] }]}
-        >
-          <View style={styles.handle} />
-          <Text style={styles.email}>{user.email}</Text>
+      <TouchableWithoutFeedback onPress={onClose}>
+        <View style={styles.fill} />
+      </TouchableWithoutFeedback>
+      <Animated.View
+        style={[
+          styles.dropdown,
+          { top: insets.top + 56 },
+          dropdownTransform,
+        ]}
+      >
+        <View style={styles.dropdownHeader}>
+          <Text style={styles.dropdownName} numberOfLines={1}>
+            {user.displayName ?? user.email ?? 'User'}
+          </Text>
+          {user.email ? (
+            <Text style={styles.dropdownEmail} numberOfLines={1}>
+              {user.email}
+            </Text>
+          ) : null}
+        </View>
 
-          <MenuRow
-            icon="👤"
-            label="Change Display Name"
-            onPress={() => setShowDisplayName(true)}
-          />
-          <MenuRow
-            icon="🔒"
-            label="Change Password"
-            onPress={() => setShowPassword(true)}
-          />
-          <MenuRow
-            icon="🏠"
-            label="Household Settings"
-            onPress={() => {
-              onClose();
-              navigation.navigate('HouseholdSettings');
-            }}
-          />
-          <MenuRow
-            icon="🔔"
-            label="Notification Preferences"
-            onPress={() => setShowNotifPrefs(true)}
-          />
+        <DropdownItem
+          icon="🏠"
+          label="Household Settings"
+          onPress={() => {
+            onClose();
+            navigation.navigate('HouseholdSettings');
+          }}
+        />
+        <DropdownItem
+          icon="👤"
+          label="Change Display Name"
+          onPress={onShowDisplayName}
+        />
+        <DropdownItem
+          icon="🔒"
+          label="Change Password"
+          onPress={onShowPassword}
+        />
+        <DropdownItem
+          icon="🔔"
+          label="Notification Preferences"
+          onPress={onShowNotifPrefs}
+        />
+        <DropdownItem
+          icon="📖"
+          label="App Guide"
+          onPress={() => {
+            onClose();
+            navigation.navigate('AppGuide');
+          }}
+        />
+        <DropdownItem
+          icon="📧"
+          label="Send Feedback"
+          onPress={() => {
+            onClose();
+            navigation.navigate('Feedback');
+          }}
+        />
 
-          <View style={styles.divider} />
+        <View style={styles.menuDivider} />
 
-          <TouchableOpacity
-            style={styles.signOutButton}
-            onPress={handleSignOut}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.signOutText}>Sign Out</Text>
-          </TouchableOpacity>
-        </Animated.View>
-      </View>
-
-      <ChangeDisplayNameModal
-        visible={showDisplayName}
-        onClose={() => setShowDisplayName(false)}
-      />
-      <ChangePasswordModal
-        visible={showPassword}
-        onClose={() => setShowPassword(false)}
-      />
-      <NotificationPreferencesModal
-        visible={showNotifPrefs}
-        onClose={() => setShowNotifPrefs(false)}
-      />
+        <DropdownItem
+          icon="🚪"
+          label="Sign Out"
+          onPress={handleSignOut}
+          danger
+        />
+      </Animated.View>
     </Modal>
   );
 }
@@ -194,6 +302,13 @@ interface NotifPrefsProps {
   onClose: () => void;
 }
 
+function formatTime(hour: number, minute: number): string {
+  const h12 = ((hour + 11) % 12) + 1;
+  const ampm = hour < 12 ? 'AM' : 'PM';
+  const mm = minute.toString().padStart(2, '0');
+  return `${h12}:${mm} ${ampm}`;
+}
+
 function NotificationPreferencesModal({ visible, onClose }: NotifPrefsProps) {
   const currentUser = useAppStore((s) => s.currentUser);
   const householdId = useAppStore((s) => s.currentHouseholdId);
@@ -201,10 +316,13 @@ function NotificationPreferencesModal({ visible, onClose }: NotifPrefsProps) {
     enabled: true,
     timing: 'both',
     snoozeDuration: '1day',
+    reminderHour: 9,
+    reminderMinute: 0,
   });
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [timePickerOpen, setTimePickerOpen] = useState(false);
 
   useEffect(() => {
     if (!visible || !currentUser?.uid) return;
@@ -241,7 +359,13 @@ function NotificationPreferencesModal({ visible, onClose }: NotifPrefsProps) {
       } else if (householdId) {
         // Re-pull current tasks so timing change takes effect immediately.
         const tasks = await getTasks(householdId);
-        await scheduleAllTaskReminders(tasks, householdId, next.timing);
+        await scheduleAllTaskReminders(
+          tasks,
+          householdId,
+          next.timing,
+          next.reminderHour,
+          next.reminderMinute
+        );
       }
     } catch (e) {
       const err = e as { message?: string };
@@ -370,6 +494,44 @@ function NotificationPreferencesModal({ visible, onClose }: NotifPrefsProps) {
                 />
               </View>
 
+              <Text style={notifStyles.sectionLabel}>⏰ Reminder time</Text>
+              <TouchableOpacity
+                style={[
+                  notifStyles.timeRow,
+                  !prefs.enabled && notifStyles.optionGroupDisabled,
+                ]}
+                onPress={() => setTimePickerOpen(true)}
+                disabled={!prefs.enabled || submitting}
+                activeOpacity={0.7}
+              >
+                <Text style={notifStyles.timeRowLabel}>Remind me at</Text>
+                <Text style={notifStyles.timeRowValue}>
+                  {formatTime(prefs.reminderHour, prefs.reminderMinute)}
+                </Text>
+              </TouchableOpacity>
+
+              {timePickerOpen ? (
+                <DateTimePicker
+                  value={(() => {
+                    const d = new Date();
+                    d.setHours(prefs.reminderHour, prefs.reminderMinute, 0, 0);
+                    return d;
+                  })()}
+                  mode="time"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={(event, selected) => {
+                    if (Platform.OS === 'android') setTimePickerOpen(false);
+                    if (event.type === 'set' && selected) {
+                      void applyAndSave({
+                        ...prefs,
+                        reminderHour: selected.getHours(),
+                        reminderMinute: selected.getMinutes(),
+                      });
+                    }
+                  }}
+                />
+              ) : null}
+
               {error ? (
                 <Text style={styles.errorText}>{error}</Text>
               ) : null}
@@ -422,22 +584,29 @@ function TimingOption({ label, active, disabled, onPress }: TimingOptionProps) {
   );
 }
 
-interface MenuRowProps {
+interface DropdownItemProps {
   icon: string;
   label: string;
   onPress: () => void;
+  danger?: boolean;
 }
 
-function MenuRow({ icon, label, onPress }: MenuRowProps) {
+function DropdownItem({ icon, label, onPress, danger }: DropdownItemProps) {
   return (
     <TouchableOpacity
       onPress={onPress}
-      activeOpacity={0.7}
-      style={styles.menuRow}
+      activeOpacity={0.6}
+      style={styles.dropdownItem}
     >
-      <Text style={styles.menuIcon}>{icon}</Text>
-      <Text style={styles.menuLabel}>{label}</Text>
-      <Text style={styles.menuChevron}>▶</Text>
+      <Text style={styles.dropdownItemIcon}>{icon}</Text>
+      <Text
+        style={[
+          styles.dropdownItemLabel,
+          danger ? styles.dropdownItemDanger : null,
+        ]}
+      >
+        {label}
+      </Text>
     </TouchableOpacity>
   );
 }
@@ -545,42 +714,68 @@ interface PasswordProps {
 }
 
 function ChangePasswordModal({ visible, onClose }: PasswordProps) {
+  const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [errors, setErrors] = useState<{
+    current?: string;
+    next?: string;
+    confirm?: string;
+    form?: string;
+  }>({});
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (visible) {
+      setCurrent('');
       setNext('');
       setConfirm('');
-      setError(null);
+      setErrors({});
     }
   }, [visible]);
 
   const handleSave = async () => {
-    if (!auth.currentUser || submitting) return;
-    if (next.length < 6) {
-      setError('Password must be at least 6 characters.');
+    if (!auth.currentUser || !auth.currentUser.email || submitting) return;
+
+    const fieldErrors: typeof errors = {};
+    if (current.length === 0) fieldErrors.current = 'Current password is required';
+    if (next.length === 0) fieldErrors.next = 'New password is required';
+    else if (next.length < 6)
+      fieldErrors.next = 'Password must be at least 6 characters';
+    if (confirm.length === 0)
+      fieldErrors.confirm = 'Please confirm your new password';
+    else if (next !== confirm)
+      fieldErrors.confirm = "Passwords don't match";
+
+    if (Object.keys(fieldErrors).length > 0) {
+      setErrors(fieldErrors);
       return;
     }
-    if (next !== confirm) {
-      setError('Passwords do not match.');
-      return;
-    }
-    setError(null);
+
+    setErrors({});
     setSubmitting(true);
     try {
+      const credential = EmailAuthProvider.credential(
+        auth.currentUser.email,
+        current
+      );
+      await reauthenticateWithCredential(auth.currentUser, credential);
       await updatePassword(auth.currentUser, next);
       Keyboard.dismiss();
       onClose();
     } catch (e) {
       const err = e as { code?: string; message?: string };
-      const message =
-        err.code === 'auth/requires-recent-login'
-          ? 'Please sign out and sign back in, then try again.'
-          : (err.message ?? 'Failed to update password');
-      setError(message);
+      if (
+        err.code === 'auth/wrong-password' ||
+        err.code === 'auth/invalid-credential' ||
+        err.code === 'auth/invalid-login-credentials'
+      ) {
+        setErrors({ current: 'Incorrect current password' });
+      } else if (err.code === 'auth/weak-password') {
+        setErrors({ next: 'Password must be at least 6 characters' });
+      } else {
+        setErrors({ form: 'Something went wrong. Please try again.' });
+      }
     } finally {
       setSubmitting(false);
     }
@@ -599,25 +794,63 @@ function ChangePasswordModal({ visible, onClose }: PasswordProps) {
       >
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Change Password</Text>
+
           <TextInput
-            style={styles.input}
+            style={[styles.input, errors.current && styles.inputError]}
+            value={current}
+            onChangeText={(t) => {
+              setCurrent(t);
+              if (errors.current) setErrors((e) => ({ ...e, current: undefined }));
+            }}
+            placeholder="Current password"
+            placeholderTextColor="#a0aec0"
+            secureTextEntry
+            autoCapitalize="none"
+            autoComplete="current-password"
+          />
+          {errors.current ? (
+            <Text style={styles.fieldError}>{errors.current}</Text>
+          ) : null}
+
+          <TextInput
+            style={[styles.input, errors.next && styles.inputError]}
             value={next}
-            onChangeText={setNext}
+            onChangeText={(t) => {
+              setNext(t);
+              if (errors.next) setErrors((e) => ({ ...e, next: undefined }));
+            }}
             placeholder="New password"
             placeholderTextColor="#a0aec0"
             secureTextEntry
             autoCapitalize="none"
+            autoComplete="new-password"
           />
+          {errors.next ? (
+            <Text style={styles.fieldError}>{errors.next}</Text>
+          ) : null}
+
           <TextInput
-            style={styles.input}
+            style={[styles.input, errors.confirm && styles.inputError]}
             value={confirm}
-            onChangeText={setConfirm}
-            placeholder="Confirm password"
+            onChangeText={(t) => {
+              setConfirm(t);
+              if (errors.confirm)
+                setErrors((e) => ({ ...e, confirm: undefined }));
+            }}
+            placeholder="Confirm new password"
             placeholderTextColor="#a0aec0"
             secureTextEntry
             autoCapitalize="none"
+            autoComplete="new-password"
           />
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+          {errors.confirm ? (
+            <Text style={styles.fieldError}>{errors.confirm}</Text>
+          ) : null}
+
+          {errors.form ? (
+            <Text style={styles.errorText}>{errors.form}</Text>
+          ) : null}
+
           <View style={styles.cardButtonRow}>
             <TouchableOpacity
               style={[styles.cardButton, styles.cardButtonGhost]}
@@ -639,9 +872,7 @@ function ChangePasswordModal({ visible, onClose }: PasswordProps) {
               {submitting ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.cardButtonPrimaryText}>
-                  Update Password
-                </Text>
+                <Text style={styles.cardButtonPrimaryText}>Update</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -661,77 +892,80 @@ const styles = StyleSheet.create({
     color: Colors.textOnDark,
     fontWeight: '700',
   },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: Colors.urgencyRed,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
   fill: {
     flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(26, 32, 44, 0.7)',
-  },
-  sheet: {
+  dropdown: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: Colors.cardBackground,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingTop: 8,
-    paddingBottom: 32,
-    paddingHorizontal: 16,
-    shadowColor: Colors.shadow,
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: -4 },
-    elevation: 12,
+    left: 16,
+    width: 240,
+    backgroundColor: '#2D3748',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+    elevation: 16,
   },
-  handle: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: Colors.borderDark,
-    marginVertical: 8,
+  dropdownHeader: {
+    padding: 16,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.12)',
   },
-  email: {
+  dropdownName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  dropdownEmail: {
     fontSize: 13,
-    color: Colors.textMuted,
-    textAlign: 'center',
-    marginBottom: 16,
+    color: 'rgba(255,255,255,0.6)',
+    marginTop: 2,
   },
-  menuRow: {
+  menuDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    marginVertical: 4,
+  },
+  dropdownItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 14,
-    paddingHorizontal: 8,
+    paddingHorizontal: 16,
   },
-  menuIcon: {
+  dropdownItemIcon: {
     fontSize: 18,
     marginRight: 12,
+    width: 24,
   },
-  menuLabel: {
-    flex: 1,
+  dropdownItemLabel: {
     fontSize: 15,
-    color: Colors.textPrimary,
-    fontWeight: '500',
+    color: '#FFFFFF',
   },
-  menuChevron: {
-    color: Colors.textLight,
-    fontSize: 12,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: Colors.border,
-    marginVertical: 12,
-  },
-  signOutButton: {
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  signOutText: {
-    color: Colors.error,
-    fontSize: 16,
-    fontWeight: '700',
+  dropdownItemDanger: {
+    color: '#FC8181',
   },
   centeredOverlay: {
     flex: 1,
@@ -762,6 +996,16 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.screenBackground,
     color: Colors.textPrimary,
     marginBottom: 12,
+  },
+  inputError: {
+    borderColor: Colors.error,
+  },
+  fieldError: {
+    color: Colors.error,
+    fontSize: 12,
+    marginTop: -8,
+    marginBottom: 10,
+    marginLeft: 2,
   },
   errorText: {
     color: Colors.error,
@@ -888,5 +1132,24 @@ const notifStyles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: Colors.primary,
+  },
+  timeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    backgroundColor: Colors.screenBackground,
+    borderRadius: 10,
+  },
+  timeRowLabel: {
+    fontSize: 14,
+    color: Colors.textPrimary,
+    fontWeight: '500',
+  },
+  timeRowValue: {
+    fontSize: 14,
+    color: Colors.primary,
+    fontWeight: '700',
   },
 });

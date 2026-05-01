@@ -1,7 +1,10 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   Linking,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,6 +17,7 @@ import { addDays, format } from 'date-fns';
 import { useAppStore } from '../../stores/appStore';
 import { getTasks } from '../../services/taskService';
 import {
+  deleteProduct,
   flagPurchasePending,
   getProducts,
   getProductUsagesForTask,
@@ -25,7 +29,9 @@ import {
   TaskProductUsage,
 } from '../../types/models';
 import InventoryBar from '../../components/InventoryBar';
+import StockOverviewCard from '../../components/StockOverviewCard';
 import UserAvatar from '../../components/UserAvatar';
+import FAB from '../../components/FAB';
 import { Colors } from '../../constants/colors';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -58,18 +64,30 @@ function recurrenceToDays(task: Task): number {
   }
 }
 
-function dotColor(percent: number): string {
-  if (percent < 25) return Colors.urgencyRed;
-  if (percent <= 50) return Colors.urgencyAmber;
-  return Colors.urgencyGreen;
-}
-
 export default function SuppliesScreen() {
   const navigation = useNavigation<any>();
   const householdId = useAppStore((s) => s.currentHouseholdId);
   const [rows, setRows] = useState<SupplyRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<'stock' | 'alpha' | 'task'>('stock');
+
+  const fabScale = useRef(new Animated.Value(1)).current;
+  const lastScrollY = useRef(0);
+  const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const y = e.nativeEvent.contentOffset.y;
+    const goingDown = y > lastScrollY.current + 1;
+    const goingUp = y < lastScrollY.current - 1;
+    lastScrollY.current = y;
+    if (goingDown || goingUp) {
+      Animated.spring(fabScale, {
+        toValue: goingDown ? 0.85 : 1,
+        useNativeDriver: true,
+        tension: 80,
+        friction: 8,
+      }).start();
+    }
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -151,17 +169,71 @@ export default function SuppliesScreen() {
     }, [householdId])
   );
 
-  const { redRows, wellStocked } = useMemo(() => {
-    const red: SupplyRow[] = [];
-    const well: SupplyRow[] = [];
-    const sorted = [...rows].sort(
-      (a, b) => stockPercent(a.product) - stockPercent(b.product)
-    );
-    for (const row of sorted) {
-      (row.isRedZone ? red : well).push(row);
+  type ListItem =
+    | { kind: 'header'; key: string; label: string }
+    | { kind: 'card'; key: string; row: SupplyRow };
+
+  const listItems = useMemo<ListItem[]>(() => {
+    if (rows.length === 0) return [];
+
+    if (sortBy === 'alpha') {
+      return [...rows]
+        .sort((a, b) =>
+          a.product.name.localeCompare(b.product.name, undefined, {
+            sensitivity: 'base',
+          })
+        )
+        .map((r) => ({
+          kind: 'card' as const,
+          key: r.product.id,
+          row: r,
+        }));
     }
-    return { redRows: red, wellStocked: well };
-  }, [rows]);
+
+    if (sortBy === 'task') {
+      const groups = new Map<string, SupplyRow[]>();
+      for (const r of rows) {
+        const taskNames =
+          r.usages.length > 0
+            ? Array.from(new Set(r.usages.map((u) => u.task.name)))
+            : ['Not linked to a task'];
+        for (const name of taskNames) {
+          const arr = groups.get(name) ?? [];
+          arr.push(r);
+          groups.set(name, arr);
+        }
+      }
+      const orderedNames = [...groups.keys()].sort((a, b) =>
+        a.localeCompare(b, undefined, { sensitivity: 'base' })
+      );
+      const out: ListItem[] = [];
+      for (const name of orderedNames) {
+        out.push({ kind: 'header', key: `h:${name}`, label: name });
+        const sorted = (groups.get(name) ?? []).sort((a, b) =>
+          a.product.name.localeCompare(b.product.name, undefined, {
+            sensitivity: 'base',
+          })
+        );
+        for (const r of sorted) {
+          out.push({
+            kind: 'card' as const,
+            key: `${name}::${r.product.id}`,
+            row: r,
+          });
+        }
+      }
+      return out;
+    }
+
+    // 'stock' (default): lowest first
+    return [...rows]
+      .sort((a, b) => stockPercent(a.product) - stockPercent(b.product))
+      .map((r) => ({
+        kind: 'card' as const,
+        key: r.product.id,
+        row: r,
+      }));
+  }, [rows, sortBy]);
 
   const handleBuy = async (product: Product) => {
     if (!householdId) return;
@@ -187,11 +259,45 @@ export default function SuppliesScreen() {
     });
   };
 
+  const confirmDelete = (product: Product) => {
+    if (!householdId) return;
+    Alert.alert(
+      `Delete ${product.name}?`,
+      'This will remove it from all tasks that use it and cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteProduct(householdId, product.id);
+              setRows((prev) =>
+                prev.filter((r) => r.product.id !== product.id)
+              );
+            } catch (e) {
+              const err = e as { message?: string };
+              Alert.alert(
+                'Delete failed',
+                err.message ?? 'Unable to delete supply'
+              );
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const showCardMenu = (product: Product) => {
     Alert.alert(product.name, undefined, [
       {
         text: 'Edit',
         onPress: () => navigation.navigate('EditProduct', { product }),
+      },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => confirmDelete(product),
       },
       { text: 'Cancel', style: 'cancel' },
     ]);
@@ -237,52 +343,80 @@ export default function SuppliesScreen() {
   return (
     <View style={styles.container}>
       <Header />
-      <View style={styles.statsRow}>
-        <View style={styles.statPill}>
-          <Text style={styles.statValue}>{rows.length}</Text>
-          <Text style={styles.statLabel}>
-            {rows.length === 1 ? 'supply tracked' : 'supplies tracked'}
-          </Text>
-        </View>
-        <View style={[styles.statPill, styles.statPillRed]}>
-          <Text style={[styles.statValue, styles.statValueRed]}>
-            {redRows.length}
-          </Text>
-          <Text style={[styles.statLabel, styles.statLabelRed]}>
-            low supply
-          </Text>
-        </View>
-      </View>
-      <ScrollView contentContainerStyle={styles.list}>
-        {redRows.map((row) => (
-          <RedCard
-            key={row.product.id}
-            row={row}
-            onTap={() => goToProduct(row.product)}
-            onBuy={() => handleBuy(row.product)}
-            onMenu={() => showCardMenu(row.product)}
-          />
-        ))}
+      <ScrollView
+        contentContainerStyle={styles.list}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+      >
+        <StockOverviewCard products={rows.map((r) => r.product)} />
 
-        {wellStocked.length > 0 ? (
-          <View style={styles.grid}>
-            {wellStocked.map((row) => (
-              <WellGridCard
-                key={row.product.id}
-                row={row}
-                onTap={() => goToProduct(row.product)}
-                onMenu={() => showCardMenu(row.product)}
+        <View style={styles.sortRow}>
+          <SortPill
+            label="A–Z"
+            active={sortBy === 'alpha'}
+            onPress={() => setSortBy('alpha')}
+          />
+          <SortPill
+            label="Stock"
+            active={sortBy === 'stock'}
+            onPress={() => setSortBy('stock')}
+          />
+          <SortPill
+            label="Task"
+            active={sortBy === 'task'}
+            onPress={() => setSortBy('task')}
+          />
+        </View>
+
+        <View style={styles.cardsBlock}>
+          {listItems.map((item) =>
+            item.kind === 'header' ? (
+              <Text key={item.key} style={styles.groupHeader}>
+                {item.label}
+              </Text>
+            ) : (
+              <SupplyCard
+                key={item.key}
+                row={item.row}
+                onTap={() => goToProduct(item.row.product)}
+                onBuy={() => handleBuy(item.row.product)}
+                onMenu={() => showCardMenu(item.row.product)}
               />
-            ))}
-          </View>
-        ) : null}
+            )
+          )}
+        </View>
       </ScrollView>
+      <FAB
+        onPress={() => navigation.navigate('CreateProduct')}
+        scrollScale={fabScale}
+      />
     </View>
   );
 }
 
+interface SortPillProps {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}
+
+function SortPill({ label, active, onPress }: SortPillProps) {
+  return (
+    <TouchableOpacity
+      style={[styles.sortPill, active && styles.sortPillActive]}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <Text
+        style={[styles.sortPillText, active && styles.sortPillTextActive]}
+      >
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
 function Header() {
-  const navigation = useNavigation<any>();
   return (
     <>
       <SafeAreaView edges={['top']} style={styles.safeTop} />
@@ -291,36 +425,42 @@ function Header() {
           <UserAvatar />
         </View>
         <Text style={styles.title}>Supplies</Text>
-        <View style={[styles.headerSide, styles.headerSideRight]}>
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => navigation.navigate('CreateProduct')}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.addButtonText}>+</Text>
-          </TouchableOpacity>
-        </View>
+        <View style={[styles.headerSide, styles.headerSideRight]} />
       </View>
     </>
   );
 }
 
-interface RedCardProps {
+function borderColorFor(percent: number): string {
+  if (percent > 50) return '#38A169';
+  if (percent > 25) return '#D69E2E';
+  return '#E53E3E';
+}
+
+interface SupplyCardProps {
   row: SupplyRow;
   onTap: () => void;
   onBuy: () => void;
   onMenu: () => void;
 }
 
-function RedCard({ row, onTap, onBuy, onMenu }: RedCardProps) {
+function SupplyCard({ row, onTap, onBuy, onMenu }: SupplyCardProps) {
+  const percent = stockPercent(row.product);
+  const left = borderColorFor(percent);
+  const isRed = row.isRedZone;
+
   return (
     <TouchableOpacity
-      style={styles.redCard}
+      style={[
+        styles.card,
+        { borderLeftColor: left },
+        isRed && styles.cardRedBg,
+      ]}
       onPress={onTap}
       activeOpacity={0.7}
     >
-      <View style={styles.redCardHeader}>
-        <Text style={styles.redCardName} numberOfLines={2}>
+      <View style={styles.cardRow}>
+        <Text style={styles.cardName} numberOfLines={2}>
           {row.product.name}
         </Text>
         <TouchableOpacity
@@ -338,60 +478,21 @@ function RedCard({ row, onTap, onBuy, onMenu }: RedCardProps) {
           <Text style={styles.buyPillText}>Buy</Text>
         </TouchableOpacity>
       </View>
-      <View style={styles.redCardBar}>
-        <InventoryBar product={row.product} showLabel={false} />
+      <View style={styles.cardBar}>
+        <InventoryBar product={row.product} showLabel={false} compact />
       </View>
-      <Text style={styles.redCardMeta}>
-        {row.product.currentQuantity} {row.product.containerUnit} remaining ·{' '}
+      <Text style={styles.cardMeta}>
         {row.applicationsRemaining}{' '}
         {row.applicationsRemaining === 1 ? 'use' : 'uses'} left
+        {row.estimatedRunOutDate
+          ? ` · runs out ~${format(row.estimatedRunOutDate, 'MMM yyyy')}`
+          : ''}
       </Text>
-      {row.reorderByDate ? (
-        <Text style={styles.redCardReorder}>
+      {isRed && row.reorderByDate ? (
+        <Text style={styles.cardReorder}>
           Reorder by {format(row.reorderByDate, 'MMM d, yyyy')}
         </Text>
       ) : null}
-    </TouchableOpacity>
-  );
-}
-
-interface WellCardProps {
-  row: SupplyRow;
-  onTap: () => void;
-  onMenu: () => void;
-}
-
-function WellGridCard({ row, onTap, onMenu }: WellCardProps) {
-  const percent = stockPercent(row.product);
-  const dot = dotColor(percent);
-  return (
-    <TouchableOpacity
-      style={styles.gridCard}
-      onPress={onTap}
-      activeOpacity={0.7}
-    >
-      <TouchableOpacity
-        onPress={onMenu}
-        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-        activeOpacity={0.6}
-        style={styles.gridMenuButton}
-      >
-        <Text style={styles.cardMenu}>···</Text>
-      </TouchableOpacity>
-      <Text style={styles.gridName} numberOfLines={2}>
-        {row.product.name}
-      </Text>
-      <View style={styles.gridDotRow}>
-        <View style={[styles.gridDot, { backgroundColor: dot }]} />
-        <Text style={styles.gridPercent}>{percent}%</Text>
-      </View>
-      <View style={styles.gridBar}>
-        <InventoryBar product={row.product} showLabel={false} compact />
-      </View>
-      <Text style={styles.gridMeta}>
-        {row.applicationsRemaining}{' '}
-        {row.applicationsRemaining === 1 ? 'use' : 'uses'} left
-      </Text>
     </TouchableOpacity>
   );
 }
@@ -413,32 +514,18 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.headerBackground,
   },
   headerSide: {
-    width: 36,
+    width: 40,
     flexDirection: 'row',
     alignItems: 'center',
   },
   headerSideRight: {
     justifyContent: 'flex-end',
   },
-  addButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  addButtonText: {
-    color: Colors.textOnDark,
-    fontSize: 22,
-    fontWeight: '600',
-    lineHeight: 24,
-  },
   title: {
     flex: 1,
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '700',
-    color: Colors.textOnDark,
+    color: '#FFFFFF',
     textAlign: 'center',
   },
   center: {
@@ -467,80 +554,76 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
   },
-  statsRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    gap: 12,
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  statPill: {
-    flex: 1,
-    backgroundColor: Colors.cardBackground,
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  statPillRed: {
-    backgroundColor: Colors.needsAttentionBg,
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-  },
-  statValueRed: {
-    color: Colors.needsAttentionText,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginTop: 2,
-  },
-  statLabelRed: {
-    color: Colors.needsAttentionText,
-    fontWeight: '600',
-  },
   list: {
     paddingHorizontal: 16,
-    paddingBottom: 32,
+    paddingBottom: 100,
   },
-  redCard: {
-    backgroundColor: Colors.needsAttentionBg,
-    borderLeftWidth: 4,
-    borderLeftColor: Colors.urgencyRed,
-    borderRadius: 12,
-    padding: 16,
+  sortRow: {
+    flexDirection: 'row',
+    gap: 8,
     marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  sortPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.cardBackground,
+  },
+  sortPillActive: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.primary,
+  },
+  sortPillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.textMuted,
+  },
+  sortPillTextActive: {
+    color: '#FFFFFF',
+  },
+  cardsBlock: {
+    paddingHorizontal: 0,
+  },
+  groupHeader: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.textMuted,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    marginTop: 12,
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  card: {
+    backgroundColor: Colors.cardBackground,
+    borderLeftWidth: 4,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
     shadowColor: Colors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 3,
   },
-  redCardHeader: {
+  cardRedBg: {
+    backgroundColor: Colors.needsAttentionBg,
+  },
+  cardRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: 12,
-    gap: 12,
+    gap: 10,
+    marginBottom: 10,
   },
-  redCardName: {
+  cardName: {
     flex: 1,
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '700',
     color: Colors.textPrimary,
-  },
-  buyPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    backgroundColor: Colors.primary,
   },
   cardMenu: {
     color: Colors.textMuted,
@@ -548,75 +631,28 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     paddingHorizontal: 6,
   },
-  gridMenuButton: {
-    position: 'absolute',
-    top: 4,
-    right: 6,
-    zIndex: 1,
+  buyPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: Colors.primary,
   },
   buyPillText: {
     color: Colors.textOnDark,
     fontSize: 13,
     fontWeight: '600',
   },
-  redCardBar: {
+  cardBar: {
     marginBottom: 8,
   },
-  redCardMeta: {
-    fontSize: 13,
-    color: Colors.textSecondary,
+  cardMeta: {
+    fontSize: 12,
+    color: Colors.textMuted,
   },
-  redCardReorder: {
+  cardReorder: {
     fontSize: 13,
     fontWeight: '700',
     color: Colors.urgencyRed,
     marginTop: 6,
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
-  gridCard: {
-    width: '48%',
-    backgroundColor: Colors.cardBackground,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  gridName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-    minHeight: 36,
-  },
-  gridDotRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 6,
-  },
-  gridDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 6,
-  },
-  gridPercent: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-  },
-  gridBar: {
-    marginBottom: 6,
-  },
-  gridMeta: {
-    fontSize: 12,
-    color: Colors.textMuted,
   },
 });

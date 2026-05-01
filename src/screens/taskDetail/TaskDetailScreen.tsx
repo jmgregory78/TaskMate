@@ -24,6 +24,7 @@ import {
   deleteTask,
   getActivityLog,
   getTask,
+  getTasks,
 } from '../../services/taskService';
 import { getFirstName } from '../../utils/nameUtils';
 import { sendAssignmentNotification } from '../../services/notificationService';
@@ -32,7 +33,6 @@ import {
   flagPurchasePending,
   getProducts,
   getProductUsagesForTask,
-  removeProductUsageFromTask,
   updateProductUsage,
 } from '../../services/productService';
 import { recurrenceSummary } from '../../utils/recurrence';
@@ -45,10 +45,17 @@ import {
 import InventoryBar from '../../components/InventoryBar';
 import CompleteTaskSheet from '../../components/CompleteTaskSheet';
 import EditProductUsageSheet from '../../components/EditProductUsageSheet';
+import TaskCompletedOverlay from '../../components/TaskCompletedOverlay';
+import ScreenHeader from '../../components/ScreenHeader';
 import {
   Assignee,
   AssigneePickerSheet,
 } from '../../components/AssigneeSelector';
+import { reminderLabel } from '../../components/ReminderPicker';
+import DeleteRowButton from '../../components/DeleteRowButton';
+import SnoozeSheet from '../../components/SnoozeSheet';
+import * as Notifications from 'expo-notifications';
+import { getNotificationPrefs, scheduleAllTaskReminders } from '../../services/notificationService';
 import { Colors } from '../../constants/colors';
 
 type TaskDetailRoute = RouteProp<{ TaskDetail: { taskId: string } }, 'TaskDetail'>;
@@ -107,9 +114,15 @@ export default function TaskDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [actionPending, setActionPending] = useState(false);
   const [sheetVisible, setSheetVisible] = useState(false);
-  const [successBanner, setSuccessBanner] = useState<string | null>(null);
   const [assigneeSheetVisible, setAssigneeSheetVisible] = useState(false);
   const [editUsageId, setEditUsageId] = useState<string | null>(null);
+  const [overlayVisible, setOverlayVisible] = useState(false);
+  const [overlayTaskName, setOverlayTaskName] = useState('');
+  const [overlayTaskIcon, setOverlayTaskIcon] = useState('📋');
+  const [snoozeSheetVisible, setSnoozeSheetVisible] = useState(false);
+  const [snoozeConfirmation, setSnoozeConfirmation] = useState<string | null>(
+    null
+  );
 
   const currentAssignee = useMemo<Assignee | null>(() => {
     if (!task?.assignedTo) return null;
@@ -216,18 +229,21 @@ export default function TaskDetailScreen() {
         note
       );
       setSheetVisible(false);
-      const refreshed = await refreshTask();
-      if (refreshed) {
-        setSuccessBanner(
-          `✅ Task completed! Next due: ${format(refreshed.nextDueDate, 'MMM d, yyyy')}`
-        );
-      }
+      setOverlayTaskName(task.name);
+      setOverlayTaskIcon(task.icon ?? '📋');
+      setOverlayVisible(true);
+      void refreshTask();
     } catch (e) {
       const err = e as { message?: string };
       Alert.alert('Error', err.message ?? 'Failed to complete task');
     } finally {
       setActionPending(false);
     }
+  };
+
+  const handleOverlayDismiss = () => {
+    setOverlayVisible(false);
+    (navigation as any).navigate('Main', { screen: 'Tasks' });
   };
 
   const handleConfirmComplete = () => {
@@ -242,36 +258,62 @@ export default function TaskDetailScreen() {
     setSheetVisible(false);
   };
 
+  const handleSnooze = async (days: number) => {
+    if (!task || !householdId || !user?.uid) return;
+    setSnoozeSheetVisible(false);
+
+    const snoozeDate = new Date();
+    snoozeDate.setDate(snoozeDate.getDate() + days);
+    snoozeDate.setHours(9, 0, 0, 0);
+
+    try {
+      // Refresh the regular schedule first so the snooze we add survives.
+      const allTasks = await getTasks(householdId);
+      const prefs = await getNotificationPrefs(user.uid);
+      if (prefs.enabled) {
+        await scheduleAllTaskReminders(
+          allTasks,
+          householdId,
+          prefs.timing,
+          prefs.reminderHour,
+          prefs.reminderMinute
+        );
+      }
+
+      // Then add the additive one-off snooze reminder.
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: `${task.icon || '📋'} ${task.name}`,
+          body: 'Snoozed reminder — this task is still due!',
+          data: { taskId: task.id, householdId },
+          sound: true,
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: snoozeDate,
+        },
+      });
+
+      const dateLabel = snoozeDate.toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'short',
+        day: 'numeric',
+      });
+      setSnoozeConfirmation(
+        `Snoozed — reminder set for ${dateLabel} at 9:00 AM`
+      );
+      setTimeout(() => setSnoozeConfirmation(null), 3000);
+    } catch (e) {
+      console.warn('[TaskDetail] snooze failed:', e);
+      Alert.alert('Snooze failed', 'Could not schedule a snooze reminder.');
+    }
+  };
+
   const handleSaveUsage = async (newAmount: number) => {
     if (!householdId || !editUsageId) return;
     await updateProductUsage(householdId, taskId, editUsageId, newAmount);
     setEditUsageId(null);
     await refreshTask();
-  };
-
-  const handleRemoveUsage = (usage: TaskProductUsage) => {
-    if (!householdId) return;
-    const productName = usage.productName;
-    Alert.alert(
-      'Remove supply',
-      `Remove ${productName} from this task? The supply will remain in your household library.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await removeProductUsageFromTask(householdId, taskId, usage.id);
-              await refreshTask();
-            } catch (e) {
-              const err = e as { message?: string };
-              Alert.alert('Error', err.message ?? 'Failed to remove supply');
-            }
-          },
-        },
-      ]
-    );
   };
 
   const handleAssigneeSelected = async (next: Assignee | null) => {
@@ -355,30 +397,90 @@ export default function TaskDetailScreen() {
 
   return (
     <>
+      <ScreenHeader
+        title=""
+        leftLabel="Tasks"
+        rightLabel="Edit"
+        rightTone="white"
+        onRightPress={() => {
+          if (!householdId) return;
+          (navigation as any).navigate('EditTask', {
+            taskId,
+            householdId,
+          });
+        }}
+      />
       <ScrollView
         style={styles.screen}
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-      <View style={styles.headerRow}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.cancel}>Back</Text>
-        </TouchableOpacity>
-        <View style={styles.headerSpacer} />
-      </View>
-
-      {successBanner ? (
-        <View style={styles.completedBanner}>
-          <Text style={styles.completedBannerText}>{successBanner}</Text>
-        </View>
-      ) : task.completedToday ? (
+      {task.completedToday ? (
         <View style={styles.completedBanner}>
           <Text style={styles.completedBannerText}>
             ✅ Completed today! Next due:{' '}
             {format(task.nextDueDate, 'MMM d, yyyy')}
+          </Text>
+        </View>
+      ) : (() => {
+        const days = differenceInCalendarDays(task.nextDueDate, new Date());
+        if (days > 7) return null;
+        const variant =
+          days < 0 ? 'overdue' : days <= 1 ? 'soon' : 'upcoming';
+        const urgencyText =
+          days < 0
+            ? `Overdue by ${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'}`
+            : days === 0
+              ? 'Due today!'
+              : days === 1
+                ? 'Due tomorrow'
+                : `Due in ${days} days`;
+        const wrapStyle = [
+          styles.reminderBanner,
+          variant === 'overdue'
+            ? styles.reminderBannerOverdue
+            : variant === 'soon'
+              ? styles.reminderBannerSoon
+              : styles.reminderBannerUpcoming,
+        ];
+        const textStyle =
+          variant === 'overdue'
+            ? styles.reminderBannerTextOverdue
+            : variant === 'soon'
+              ? styles.reminderBannerTextSoon
+              : styles.reminderBannerTextUpcoming;
+        return (
+          <View style={wrapStyle}>
+            <Text style={[styles.reminderBannerHeader, textStyle]}>
+              🔔 {urgencyText}
+            </Text>
+            <View style={styles.reminderBannerActions}>
+              <TouchableOpacity
+                style={styles.reminderCompleteButton}
+                onPress={handleOpenComplete}
+                disabled={actionPending}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.reminderCompleteText}>
+                  ✅ Mark Complete
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.reminderSnoozeButton}
+                onPress={() => setSnoozeSheetVisible(true)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.reminderSnoozeText}>😴 Snooze</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        );
+      })()}
+
+      {snoozeConfirmation ? (
+        <View style={styles.snoozeConfirmation}>
+          <Text style={styles.snoozeConfirmationText}>
+            ✅ {snoozeConfirmation}
           </Text>
         </View>
       ) : null}
@@ -409,121 +511,10 @@ export default function TaskDetailScreen() {
             Last completed: {format(task.lastCompletedAt, 'MMM d, yyyy')}
           </Text>
         ) : null}
+        <Text style={styles.reminderText}>
+          🔔 Reminder: {reminderLabel(task.reminderDaysBefore)}
+        </Text>
       </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionHeader}>Inventory & Supplies</Text>
-        {productUsages.length === 0 ? (
-          <Text style={[styles.placeholderText, styles.suppliesEmpty]}>
-            No supplies linked yet.
-          </Text>
-        ) : (
-          productUsages.map((usage) => {
-            const product = products.find((p) => p.id === usage.productId);
-            const displayName = product?.name ?? usage.productName;
-            return (
-              <View key={usage.id} style={styles.productCard}>
-                <View style={styles.productHeaderRow}>
-                  <Text style={styles.productName}>{displayName}</Text>
-                  {product ? (
-                    <TouchableOpacity
-                      style={styles.buyPill}
-                      onPress={() => handleBuyOnAmazon(product)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.buyPillText}>Buy</Text>
-                    </TouchableOpacity>
-                  ) : null}
-                </View>
-                <View style={styles.usageRow}>
-                  <Text style={styles.productMeta}>
-                    Uses {usage.usageAmount} {usage.usageUnit} per completion
-                  </Text>
-                  <View style={styles.usageActions}>
-                    <TouchableOpacity
-                      style={styles.iconButton}
-                      onPress={() => setEditUsageId(usage.id)}
-                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.iconButtonText}>✏️</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => handleRemoveUsage(usage)}
-                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.removeText}>Remove</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-                {product ? (
-                  <>
-                    <View style={styles.productBar}>
-                      <InventoryBar product={product} />
-                    </View>
-                    <Text style={styles.productMeta}>
-                      Shared supply · {product.currentQuantity}{' '}
-                      {product.containerUnit} on hand total
-                    </Text>
-                    {product.lastPurchasedAt ? (
-                      <Text style={styles.productMeta}>
-                        Last bought: {format(product.lastPurchasedAt, 'MMM d')}
-                        {product.lastPurchasePrice != null
-                          ? ` · $${product.lastPurchasePrice.toFixed(2)}`
-                          : ''}
-                      </Text>
-                    ) : null}
-                    <TouchableOpacity
-                      style={styles.logButton}
-                      onPress={() =>
-                        (navigation as any).navigate('LogPurchase', {
-                          householdId,
-                          productId: product.id,
-                        })
-                      }
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.logButtonText}>Log Purchase</Text>
-                    </TouchableOpacity>
-                  </>
-                ) : (
-                  <Text style={styles.productMeta}>
-                    ⚠️ Linked supply not found
-                  </Text>
-                )}
-              </View>
-            );
-          })
-        )}
-        <TouchableOpacity
-          style={styles.addSupplyButton}
-          onPress={() =>
-            (navigation as any).navigate('AddProductUsage', {
-              householdId,
-              taskId,
-            })
-          }
-          activeOpacity={0.8}
-        >
-          <Text style={styles.addSupplyButtonText}>➕ Add Supply</Text>
-        </TouchableOpacity>
-      </View>
-
-      {task.completedToday ? (
-        <View style={[styles.completeButton, styles.completeButtonDone]}>
-          <Text style={styles.completeButtonText}>Completed ✓</Text>
-        </View>
-      ) : (
-        <TouchableOpacity
-          style={[styles.completeButton, actionPending && styles.disabled]}
-          onPress={handleOpenComplete}
-          disabled={actionPending}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.completeButtonText}>Mark as Complete</Text>
-        </TouchableOpacity>
-      )}
 
       <View style={styles.assignmentRow}>
         {currentAssignee ? (
@@ -552,19 +543,101 @@ export default function TaskDetailScreen() {
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity
-        style={styles.editButton}
-        onPress={() => {
-          if (!householdId) return;
-          (navigation as any).navigate('EditTask', {
-            taskId,
-            householdId,
-          });
-        }}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.editButtonText}>Edit Task</Text>
-      </TouchableOpacity>
+      {task.completedToday ? (
+        <View style={[styles.completeButton, styles.completeButtonDone]}>
+          <Text style={styles.completeButtonText}>Completed ✓</Text>
+        </View>
+      ) : (
+        <TouchableOpacity
+          style={[styles.completeButton, actionPending && styles.disabled]}
+          onPress={handleOpenComplete}
+          disabled={actionPending}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.completeButtonText}>Mark as Complete</Text>
+        </TouchableOpacity>
+      )}
+
+      <View style={styles.section}>
+        <Text style={styles.sectionHeader}>Inventory & Supplies</Text>
+        {productUsages.length === 0 ? (
+          <Text style={[styles.placeholderText, styles.suppliesEmpty]}>
+            No supplies linked yet.
+          </Text>
+        ) : (
+          productUsages.map((usage) => {
+            const product = products.find((p) => p.id === usage.productId);
+            const displayName = product?.name ?? usage.productName;
+            return (
+              <View key={usage.id} style={styles.productCard}>
+                {/* Row 1: name + Buy */}
+                <View style={styles.productHeaderRow}>
+                  <Text
+                    style={styles.productName}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
+                    {displayName}
+                  </Text>
+                  {product ? (
+                    <TouchableOpacity
+                      style={styles.buyPill}
+                      onPress={() => handleBuyOnAmazon(product)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.buyPillText}>Buy</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+
+                {/* Row 2: inventory bar */}
+                {product ? (
+                  <View style={styles.productBar}>
+                    <InventoryBar product={product} />
+                  </View>
+                ) : null}
+
+                {/* Row 3: usage + Edit */}
+                <View style={styles.usageRow}>
+                  <Text
+                    style={styles.usageMeta}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
+                    {usage.usageAmount} {usage.usageUnit} per completion
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.editPill}
+                    onPress={() => setEditUsageId(usage.id)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.editPillText}>✏️ Edit</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {!product ? (
+                  <Text style={styles.productMeta}>
+                    ⚠️ Linked supply not found
+                  </Text>
+                ) : null}
+              </View>
+            );
+          })
+        )}
+        <TouchableOpacity
+          style={styles.addSupplyButton}
+          onPress={() =>
+            (navigation as any).navigate('AddProductUsage', {
+              householdId,
+              taskId,
+            })
+          }
+          activeOpacity={0.8}
+        >
+          <Text style={styles.addSupplyButtonText}>➕ Add Supply</Text>
+        </TouchableOpacity>
+      </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionHeader}>Activity</Text>
@@ -600,14 +673,13 @@ export default function TaskDetailScreen() {
         )}
       </View>
 
-      <TouchableOpacity
-        style={styles.deleteLink}
-        onPress={handleDelete}
-        disabled={actionPending}
-        activeOpacity={0.7}
-      >
-        <Text style={styles.deleteLinkText}>🗑️ Delete Task</Text>
-      </TouchableOpacity>
+      <View style={styles.deleteWrap}>
+        <DeleteRowButton
+          label="Delete from Task List"
+          onPress={handleDelete}
+          disabled={actionPending}
+        />
+      </View>
       </ScrollView>
       <CompleteTaskSheet
         visible={sheetVisible}
@@ -645,6 +717,20 @@ export default function TaskDetailScreen() {
         onSave={handleSaveUsage}
         onCancel={() => setEditUsageId(null)}
       />
+      <TaskCompletedOverlay
+        visible={overlayVisible}
+        taskName={overlayTaskName}
+        taskIcon={overlayTaskIcon}
+        onDismiss={handleOverlayDismiss}
+      />
+      <SnoozeSheet
+        visible={snoozeSheetVisible}
+        taskName={task.name}
+        onSnooze={(days) => {
+          void handleSnooze(days);
+        }}
+        onCancel={() => setSnoozeSheetVisible(false)}
+      />
     </>
   );
 }
@@ -664,22 +750,90 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 24,
   },
-  headerRow: {
+  deleteWrap: {
+    paddingHorizontal: 16,
+  },
+  reminderBanner: {
+    marginTop: 16,
+    marginHorizontal: 16,
+    padding: 14,
+    borderRadius: 12,
+    borderLeftWidth: 4,
+  },
+  reminderBannerOverdue: {
+    backgroundColor: '#FFF5F5',
+    borderLeftColor: '#E53E3E',
+  },
+  reminderBannerSoon: {
+    backgroundColor: '#FFFBEB',
+    borderLeftColor: '#DD6B20',
+  },
+  reminderBannerUpcoming: {
+    backgroundColor: '#EBF8FF',
+    borderLeftColor: '#3182CE',
+  },
+  reminderBannerHeader: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  reminderBannerTextOverdue: {
+    color: '#E53E3E',
+  },
+  reminderBannerTextSoon: {
+    color: '#DD6B20',
+  },
+  reminderBannerTextUpcoming: {
+    color: '#2B6CB0',
+  },
+  reminderBannerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 56,
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-    backgroundColor: Colors.headerBackground,
   },
-  headerSpacer: {
-    width: 56,
+  reminderCompleteButton: {
+    flex: 1,
+    marginRight: 8,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#38A169',
   },
-  cancel: {
-    color: Colors.textOnDark,
-    fontSize: 16,
+  reminderCompleteText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  reminderSnoozeButton: {
+    flex: 1,
+    marginLeft: 8,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.screenBackground,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+  },
+  reminderSnoozeText: {
+    color: Colors.textSecondary,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  snoozeConfirmation: {
+    marginTop: 8,
+    marginHorizontal: 16,
+    backgroundColor: Colors.successBg,
+    borderColor: Colors.successBorder,
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 10,
+  },
+  snoozeConfirmationText: {
+    color: Colors.successText,
+    fontSize: 13,
     fontWeight: '600',
+    textAlign: 'center',
   },
   titleBlock: {
     alignItems: 'center',
@@ -733,6 +887,11 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     lineHeight: 22,
   },
+  reminderText: {
+    fontSize: 13,
+    color: Colors.textMuted,
+    marginTop: 6,
+  },
   placeholderText: {
     fontSize: 14,
     color: Colors.textLight,
@@ -783,13 +942,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   productName: {
+    flex: 1,
     fontSize: 15,
     fontWeight: '700',
     color: Colors.textPrimary,
-    marginBottom: 10,
   },
   productBar: {
-    marginBottom: 8,
+    marginVertical: 8,
   },
   productMeta: {
     fontSize: 12,
@@ -799,30 +958,29 @@ const styles = StyleSheet.create({
   productHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
+    gap: 10,
   },
   usageRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-    marginBottom: 6,
+    gap: 10,
+    marginTop: 4,
   },
-  usageActions: {
-    flexDirection: 'row',
+  usageMeta: {
+    flex: 1,
+    fontSize: 12,
+    color: Colors.textMuted,
+  },
+  editPill: {
+    flexShrink: 0,
+    minHeight: 34,
+    minWidth: 50,
+    paddingHorizontal: 8,
     alignItems: 'center',
-    gap: 12,
+    justifyContent: 'center',
   },
-  iconButton: {
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-  },
-  iconButtonText: {
-    fontSize: 16,
-  },
-  removeText: {
-    color: Colors.error,
+  editPillText: {
+    color: Colors.primary,
     fontSize: 13,
     fontWeight: '600',
   },
@@ -831,29 +989,18 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   buyPill: {
+    flexShrink: 0,
+    minHeight: 34,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
     backgroundColor: Colors.primary,
-  },
-  buyPillText: {
-    color: Colors.textOnDark,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  logButton: {
-    height: 40,
-    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.cardBackground,
-    borderWidth: 1,
-    borderColor: Colors.borderDark,
-    marginTop: 8,
   },
-  logButtonText: {
-    color: Colors.textPrimary,
-    fontSize: 14,
+  buyPillText: {
+    color: '#FFFFFF',
+    fontSize: 13,
     fontWeight: '600',
   },
   addSupplyButton: {
@@ -903,22 +1050,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',
-  },
-  editButton: {
-    height: 48,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 12,
-    marginHorizontal: 16,
-    backgroundColor: Colors.cardBackground,
-  },
-  editButtonText: {
-    color: Colors.primary,
-    fontSize: 16,
-    fontWeight: '600',
   },
   disabled: {
     opacity: 0.6,
@@ -976,16 +1107,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: Colors.textSecondary,
-  },
-  deleteLink: {
-    alignItems: 'center',
-    marginTop: 32,
-    paddingVertical: 8,
-  },
-  deleteLinkText: {
-    color: Colors.error,
-    fontSize: 14,
-    fontWeight: '600',
   },
   errorText: {
     color: Colors.error,
