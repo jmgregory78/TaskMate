@@ -23,7 +23,6 @@ import {
   getProductUsagesForTask,
 } from '../../services/productService';
 import { Product, TaskProductUsage } from '../../types/models';
-import { StatusBar } from 'expo-status-bar';
 import { Colors } from '../../constants/colors';
 
 type Route = RouteProp<
@@ -213,7 +212,6 @@ export default function AddProductUsageScreen() {
   if (mode === 'edit-existing' && selectedProduct) {
     return (
       <>
-      <StatusBar style="dark" />
       {renderHeader('Add to Task')}
       <ScreenWrapper contentContainerStyle={styles.content}>
 
@@ -259,7 +257,6 @@ export default function AddProductUsageScreen() {
   if (mode === 'create-new') {
     return (
       <>
-      <StatusBar style="dark" />
       {renderHeader('New Supply')}
       <ScreenWrapper contentContainerStyle={styles.content}>
 
@@ -366,7 +363,6 @@ export default function AddProductUsageScreen() {
 
   return (
     <>
-    <StatusBar style="dark" />
     {renderHeader('Add Supply')}
     <ScreenWrapper contentContainerStyle={styles.content}>
 

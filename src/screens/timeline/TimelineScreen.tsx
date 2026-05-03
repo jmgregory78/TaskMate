@@ -19,10 +19,10 @@ import {
   getNotificationPrefs,
   scheduleAllTaskReminders,
 } from '../../services/notificationService';
-import { seedDummyTasks } from '../../utils/seedTasks';
 import { Task } from '../../types/models';
 import UserAvatar from '../../components/UserAvatar';
 import FAB from '../../components/FAB';
+import TaskTypeSheet from '../../components/TaskTypeSheet';
 import { getFirstName } from '../../utils/nameUtils';
 import { Colors } from '../../constants/colors';
 import { Typography } from '../../constants/typography';
@@ -179,11 +179,20 @@ export default function TimelineScreen() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [seeding, setSeeding] = useState(false);
   const [showAttention, setShowAttention] = useState(true);
   const [showSoon, setShowSoon] = useState(false);
   const [showLater, setShowLater] = useState(false);
   const [filter, setFilter] = useState<'all' | 'mine'>('all');
+  const [sheetOpen, setSheetOpen] = useState(false);
+
+  const openSuggested = () => {
+    setSheetOpen(false);
+    navigation.navigate('SuggestedTasks');
+  };
+  const openCustom = () => {
+    setSheetOpen(false);
+    navigation.navigate('AddTask');
+  };
 
   const fabScale = useRef(new Animated.Value(1)).current;
   const lastScrollY = useRef(0);
@@ -248,27 +257,6 @@ export default function TimelineScreen() {
     }, [householdId, currentUser?.uid])
   );
 
-  const handleSeed = async () => {
-    if (!householdId || !currentUser || seeding) return;
-    setSeeding(true);
-    setError(null);
-    try {
-      await seedDummyTasks(
-        householdId,
-        currentUser.email ?? currentUser.uid,
-        currentUser.uid,
-        currentUser.displayName ?? currentUser.email ?? currentUser.uid
-      );
-      const fresh = await getTasks(householdId);
-      setTasks(fresh);
-    } catch (e) {
-      const err = e as { message?: string };
-      setError(err.message ?? String(e));
-    } finally {
-      setSeeding(false);
-    }
-  };
-
   const filteredTasks = useMemo(() => {
     if (filter === 'mine' && currentUser?.uid) {
       return tasks.filter((t) => t.assignedTo === currentUser.uid);
@@ -317,65 +305,40 @@ export default function TimelineScreen() {
     </>
   );
 
-  if (loading) {
-    return (
-      <View style={styles.container}>
-        {Header}
-        <View style={styles.center}>
-          <ActivityIndicator size="large" />
-        </View>
-      </View>
-    );
-  }
-
-  if (error) {
-    return (
-      <View style={styles.container}>
-        {Header}
-        <View style={styles.center}>
-          <Text style={styles.errorText}>{error}</Text>
-        </View>
-      </View>
-    );
-  }
-
-  if (tasks.length === 0) {
-    return (
-      <View style={styles.container}>
-        {Header}
-        <View style={styles.center}>
-          <Text style={styles.emptyEmoji}>🏠</Text>
-          <Text style={styles.emptyText}>
-            No tasks yet. Tap + to add your first task.
-          </Text>
-
-          {seeding ? (
-            <View style={styles.seedLoading}>
-              <ActivityIndicator size="large" />
-              <Text style={styles.seedLoadingText}>
-                Loading demo tasks... (this may take 30 seconds)
-              </Text>
-            </View>
-          ) : (
-            <TouchableOpacity
-              style={styles.seedButton}
-              onPress={handleSeed}
-              activeOpacity={0.8}
-              disabled={!currentUser}
-            >
-              <Text style={styles.seedButtonText}>🌱 Load Demo Data</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-    );
-  }
-
   const currentUserId = currentUser?.uid ?? null;
 
-  return (
-    <View style={styles.container}>
-      {Header}
+  let body: React.ReactNode;
+  if (loading) {
+    body = (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  } else if (error) {
+    body = (
+      <View style={styles.center}>
+        <Text style={styles.errorText}>{error}</Text>
+      </View>
+    );
+  } else if (tasks.length === 0) {
+    body = (
+      <View style={styles.emptyState}>
+        <Text style={styles.emptyEmoji}>📋</Text>
+        <Text style={styles.emptyTitle}>No tasks yet</Text>
+        <Text style={styles.emptySubtext}>
+          Get started by adding your first task
+        </Text>
+        <TouchableOpacity
+          style={styles.emptyPrimaryButton}
+          onPress={() => setSheetOpen(true)}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.emptyPrimaryText}>＋ Add a Task</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  } else {
+    body = (
       <ScrollView
         contentContainerStyle={styles.listContent}
         onScroll={handleScroll}
@@ -494,9 +457,19 @@ export default function TimelineScreen() {
           </>
         )}
       </ScrollView>
-      <FAB
-        onPress={() => navigation.navigate('AddTask')}
-        scrollScale={fabScale}
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      {Header}
+      {body}
+      <FAB onPress={() => setSheetOpen(true)} scrollScale={fabScale} />
+      <TaskTypeSheet
+        visible={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        onSuggested={openSuggested}
+        onCustom={openCustom}
       />
     </View>
   );
@@ -505,6 +478,7 @@ export default function TimelineScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    position: 'relative',
     backgroundColor: Colors.screenBackground,
   },
   safeTop: {
@@ -540,39 +514,44 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 24,
   },
+  emptyState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingBottom: 100,
+  },
   emptyEmoji: {
     fontSize: 64,
     marginBottom: 16,
   },
-  emptyText: {
-    color: Colors.textSecondary,
-    fontSize: 15,
+  emptyTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+    marginBottom: 8,
     textAlign: 'center',
   },
-  seedButton: {
-    marginTop: 24,
+  emptySubtext: {
+    fontSize: 15,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 24,
+    paddingHorizontal: 16,
+  },
+  emptyPrimaryButton: {
+    alignSelf: 'stretch',
+    backgroundColor: Colors.primary,
+    paddingVertical: 14,
     paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.urgencyGreen,
-    backgroundColor: '#F0FDF4',
-  },
-  seedButtonText: {
-    color: Colors.urgencyGreen,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  seedLoading: {
-    marginTop: 24,
+    borderRadius: 12,
     alignItems: 'center',
+    marginBottom: 12,
   },
-  seedLoadingText: {
-    marginTop: 12,
-    color: Colors.textSecondary,
-    fontSize: 14,
-    textAlign: 'center',
-    paddingHorizontal: 24,
+  emptyPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
   },
   errorText: {
     color: Colors.error,

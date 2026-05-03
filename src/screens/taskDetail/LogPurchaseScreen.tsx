@@ -25,7 +25,6 @@ import {
   getProduct,
 } from '../../services/productService';
 import { useAuth } from '../../hooks/useAuth';
-import { StatusBar } from 'expo-status-bar';
 import { Colors } from '../../constants/colors';
 
 type Route = RouteProp<
@@ -151,7 +150,6 @@ export default function LogPurchaseScreen() {
 
   return (
     <>
-    <StatusBar style="dark" />
     <ScreenWrapper contentContainerStyle={styles.content}>
       <View style={styles.headerRow}>
         <TouchableOpacity

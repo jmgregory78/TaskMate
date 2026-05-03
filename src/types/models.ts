@@ -110,6 +110,7 @@ export interface Task {
   assignedAt: Date | null;
   assignedBy: string | null;
   reminderDaysBefore: number;
+  snoozedUntil: Date | null;
 }
 
 export interface Product {

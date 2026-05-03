@@ -38,6 +38,7 @@ type CreateTaskInput = Omit<
   | 'assignedToName'
   | 'assignedAt'
   | 'assignedBy'
+  | 'snoozedUntil'
 > & {
   assignedTo?: string | null;
   assignedToName?: string | null;
@@ -127,6 +128,7 @@ function mapTaskDoc(id: string, data: any): Task {
     assignedBy: data.assignedBy ?? null,
     reminderDaysBefore:
       typeof data.reminderDaysBefore === 'number' ? data.reminderDaysBefore : 1,
+    snoozedUntil: toDateOrNull(data.snoozedUntil),
   };
 }
 
@@ -264,10 +266,24 @@ export async function updateTask(
   if (data.assignedAt instanceof Date) {
     payload.assignedAt = Timestamp.fromDate(data.assignedAt);
   }
+  if (data.snoozedUntil instanceof Date) {
+    payload.snoozedUntil = Timestamp.fromDate(data.snoozedUntil);
+  }
   if (data.recurrence) {
     payload.recurrence = serializeRecurrence(data.recurrence);
   }
   await updateDoc(ref, payload);
+}
+
+export async function snoozeTask(
+  householdId: string,
+  taskId: string,
+  snoozedUntil: Date
+): Promise<void> {
+  await updateDoc(
+    doc(db, 'households', householdId, 'tasks', taskId),
+    { snoozedUntil: Timestamp.fromDate(snoozedUntil) }
+  );
 }
 
 export async function assignTask(

@@ -13,7 +13,11 @@
       "backgroundColor": "#2D3748"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.jmgregory78.TaskMate",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -28,6 +32,11 @@
     },
     "plugins": [
       "@react-native-community/datetimepicker"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "26d9eb72-7f17-4bfe-9603-4364feaa3bc1"
+      }
+    }
   }
 }

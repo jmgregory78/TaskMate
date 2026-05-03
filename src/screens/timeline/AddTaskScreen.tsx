@@ -5,10 +5,9 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  ActivityIndicator,
   Platform,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { format } from 'date-fns';
 import DateTimePicker, {
   DateTimePickerEvent,
@@ -26,6 +25,7 @@ import {
   RecurrenceEndType,
   RecurrenceFrequency,
   RecurrenceRule,
+  TaskCategory,
 } from '../../types/models';
 import { weekOfMonthFor } from '../../utils/recurrence';
 import ScreenWrapper from '../../components/ScreenWrapper';
@@ -34,7 +34,6 @@ import AssigneeSelector, {
   Assignee,
 } from '../../components/AssigneeSelector';
 import ReminderPicker from '../../components/ReminderPicker';
-import { StatusBar } from 'expo-status-bar';
 import { Colors } from '../../constants/colors';
 
 const FREQUENCIES: { key: RecurrenceFrequency; label: string }[] = [
@@ -59,19 +58,45 @@ function parsePositiveInt(value: string, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+type AddTaskRoute = RouteProp<
+  {
+    AddTask:
+      | {
+          prefill?: {
+            name?: string;
+            category?: TaskCategory;
+            frequency?: RecurrenceFrequency;
+            interval?: number;
+            reminderDaysBefore?: number;
+          };
+        }
+      | undefined;
+  },
+  'AddTask'
+>;
+
 export default function AddTaskScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
+  const route = useRoute<AddTaskRoute>();
+  const prefill = route.params?.prefill;
   const { user } = useAuth();
   const householdId = useAppStore((s) => s.currentHouseholdId);
 
   const today = useMemo(() => new Date(), []);
-  const [name, setName] = useState('');
+  const [name, setName] = useState(prefill?.name ?? '');
   const [description, setDescription] = useState('');
-  const [firstDueDate, setFirstDueDate] = useState<Date>(today);
+  const [firstDueDate, setFirstDueDate] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showDateError, setShowDateError] = useState(false);
 
-  const [frequency, setFrequency] = useState<RecurrenceFrequency>('monthly');
-  const [intervalText, setIntervalText] = useState('1');
+  const [category] = useState<TaskCategory>(prefill?.category ?? 'Other');
+
+  const [frequency, setFrequency] = useState<RecurrenceFrequency>(
+    prefill?.frequency ?? 'monthly'
+  );
+  const [intervalText, setIntervalText] = useState(
+    prefill?.interval ? String(prefill.interval) : '1'
+  );
 
   const [daysOfWeek, setDaysOfWeek] = useState<number[]>([today.getDay()]);
 
@@ -90,7 +115,9 @@ export default function AddTaskScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [reminderDaysBefore, setReminderDaysBefore] = useState<number>(1);
+  const [reminderDaysBefore, setReminderDaysBefore] = useState<number>(
+    prefill?.reminderDaysBefore ?? 1
+  );
 
   const [assignee, setAssignee] = useState<Assignee | null>(() =>
     user
@@ -165,22 +192,30 @@ export default function AddTaskScreen() {
   };
 
   const trimmedName = name.trim();
-  const canSubmit = trimmedName.length > 0 && !submitting;
+  const hasDate = firstDueDate !== null;
+  const canSubmit = trimmedName.length > 0 && hasDate && !submitting;
 
-  const onChangeDate = (
+  const onChangeFirstDate = (
     event: DateTimePickerEvent,
-    selected: Date | undefined,
-    setter: (d: Date) => void,
-    closer: () => void
+    selected: Date | undefined
   ) => {
-    if (Platform.OS === 'android') closer();
+    if (Platform.OS === 'android') setShowDatePicker(false);
     if (event.type === 'set' && selected) {
-      setter(selected);
+      setFirstDueDate(selected);
+      setShowDateError(false);
       const dow = selected.getDay();
-      if (setter === setFirstDueDate) {
-        setDaysOfWeek((prev) => (prev.length === 0 ? [dow] : prev));
-        setMonthlyWeek(weekOfMonthFor(selected));
-      }
+      setDaysOfWeek((prev) => (prev.length === 0 ? [dow] : prev));
+      setMonthlyWeek(weekOfMonthFor(selected));
+    }
+  };
+
+  const onChangeEndDate = (
+    event: DateTimePickerEvent,
+    selected: Date | undefined
+  ) => {
+    if (Platform.OS === 'android') setShowEndByPicker(false);
+    if (event.type === 'set' && selected) {
+      setEndByDate(selected);
     }
   };
 
@@ -190,7 +225,7 @@ export default function AddTaskScreen() {
     );
   };
 
-  const buildRecurrence = (): RecurrenceRule => {
+  const buildRecurrence = (dueDate: Date): RecurrenceRule => {
     const interval = parsePositiveInt(intervalText, 1);
     const rule: RecurrenceRule = { frequency, interval };
 
@@ -201,11 +236,11 @@ export default function AddTaskScreen() {
     if (frequency === 'monthly') {
       rule.monthlyType = monthlyType;
       if (monthlyType === 'dayOfMonth') {
-        rule.monthlyDay = firstDueDate.getDate();
+        rule.monthlyDay = dueDate.getDate();
       } else {
         rule.monthlyWeekday = {
           week: monthlyWeek,
-          day: firstDueDate.getDay(),
+          day: dueDate.getDay(),
         };
       }
     }
@@ -222,7 +257,10 @@ export default function AddTaskScreen() {
   };
 
   const handleSubmit = async () => {
-    if (!user || !householdId || !canSubmit) return;
+    if (!user || !householdId || !canSubmit || !firstDueDate) {
+      if (!firstDueDate) setShowDateError(true);
+      return;
+    }
     setError(null);
     setSubmitting(true);
     try {
@@ -232,10 +270,10 @@ export default function AddTaskScreen() {
         {
           householdId,
           name: trimmedName,
-          category: 'Other',
+          category,
           description: description.trim() || undefined,
           firstDueDate,
-          recurrence: buildRecurrence(),
+          recurrence: buildRecurrence(firstDueDate),
           hasInventory: false,
           instructions: null,
           assignedTo: assignee?.userId ?? null,
@@ -270,9 +308,17 @@ export default function AddTaskScreen() {
 
   return (
     <>
-      <StatusBar style="dark" />
       <ScreenHeader title="New Task" leftLabel="Back" />
       <ScreenWrapper contentContainerStyle={styles.content}>
+        <TouchableOpacity
+          style={styles.suggestedShortcut}
+          onPress={() => navigation.navigate('SuggestedTasks')}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.suggestedShortcutText}>
+            ✨ Pick from suggested tasks →
+          </Text>
+        </TouchableOpacity>
         <Text style={styles.label}>Task name</Text>
       <TextInput
         style={styles.input}
@@ -295,22 +341,33 @@ export default function AddTaskScreen() {
 
       <Text style={styles.label}>First due date</Text>
       <TouchableOpacity
-        style={styles.dateButton}
+        style={[
+          styles.dateButton,
+          !firstDueDate && styles.dateButtonEmpty,
+          showDateError && !firstDueDate && styles.dateButtonError,
+        ]}
         onPress={() => setShowDatePicker(true)}
         activeOpacity={0.7}
       >
-        <Text style={styles.dateButtonText}>
-          {format(firstDueDate, 'MMMM d, yyyy')}
+        <Text
+          style={
+            firstDueDate ? styles.dateButtonText : styles.dateButtonPlaceholder
+          }
+        >
+          {firstDueDate
+            ? format(firstDueDate, 'MMMM d, yyyy')
+            : 'Tap to set due date'}
         </Text>
       </TouchableOpacity>
+      {showDateError && !firstDueDate ? (
+        <Text style={styles.dateErrorHint}>Please set a due date</Text>
+      ) : null}
       {showDatePicker && (
         <DateTimePicker
-          value={firstDueDate}
+          value={firstDueDate ?? today}
           mode="date"
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          onChange={(e, d) =>
-            onChangeDate(e, d, setFirstDueDate, () => setShowDatePicker(false))
-          }
+          onChange={onChangeFirstDate}
         />
       )}
 
@@ -391,12 +448,20 @@ export default function AddTaskScreen() {
             <Text style={styles.rowText}>month(s)</Text>
           </View>
           <RadioRow
-            label={`Day ${firstDueDate.getDate()} of the month`}
+            label={
+              firstDueDate
+                ? `Day ${firstDueDate.getDate()} of the month`
+                : 'Day of the month'
+            }
             selected={monthlyType === 'dayOfMonth'}
             onPress={() => setMonthlyType('dayOfMonth')}
           />
           <RadioRow
-            label={`The ${monthlyWeek} ${WEEKDAY_SHORT[firstDueDate.getDay()]} of the month`}
+            label={
+              firstDueDate
+                ? `The ${monthlyWeek} ${WEEKDAY_SHORT[firstDueDate.getDay()]} of the month`
+                : `The ${monthlyWeek} weekday of the month`
+            }
             selected={monthlyType === 'dayOfWeek'}
             onPress={() => setMonthlyType('dayOfWeek')}
           />
@@ -443,7 +508,7 @@ export default function AddTaskScreen() {
             <Text style={styles.rowText}>year(s)</Text>
           </View>
           <Text style={styles.rowText}>
-            On {format(firstDueDate, 'MMMM d')}
+            {firstDueDate ? `On ${format(firstDueDate, 'MMMM d')}` : 'On the selected date'}
           </Text>
         </View>
       )}
@@ -453,7 +518,7 @@ export default function AddTaskScreen() {
         <View style={styles.row}>
           <Text style={styles.rowText}>Start:</Text>
           <Text style={[styles.rowText, styles.bold]}>
-            {format(firstDueDate, 'MMMM d, yyyy')}
+            {firstDueDate ? format(firstDueDate, 'MMMM d, yyyy') : '—'}
           </Text>
         </View>
 
@@ -509,11 +574,7 @@ export default function AddTaskScreen() {
             value={endByDate}
             mode="date"
             display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            onChange={(e, d) =>
-              onChangeDate(e, d, setEndByDate, () =>
-                setShowEndByPicker(false)
-              )
-            }
+            onChange={onChangeEndDate}
           />
         )}
       </View>
@@ -606,14 +667,12 @@ export default function AddTaskScreen() {
       <TouchableOpacity
         style={[styles.button, !canSubmit && styles.buttonDisabled]}
         onPress={handleSubmit}
-        disabled={!canSubmit}
+        disabled={submitting}
         activeOpacity={0.8}
       >
-        {submitting ? (
-          <ActivityIndicator color={Colors.textOnDark} />
-        ) : (
-          <Text style={styles.buttonText}>Save Task</Text>
-        )}
+        <Text style={styles.buttonText}>
+          {submitting ? 'Adding...' : 'Save Task'}
+        </Text>
       </TouchableOpacity>
       </ScreenWrapper>
     </>
@@ -688,10 +747,38 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.screenBackground,
     justifyContent: 'center',
   },
+  dateButtonEmpty: {
+    borderStyle: 'dashed',
+  },
+  dateButtonError: {
+    borderColor: Colors.error,
+  },
   dateButtonText: {
     fontSize: 16,
     color: Colors.textPrimary,
     fontWeight: '500',
+  },
+  dateButtonPlaceholder: {
+    fontSize: 16,
+    color: Colors.textLight,
+    fontWeight: '400',
+  },
+  dateErrorHint: {
+    marginTop: 6,
+    fontSize: 13,
+    color: Colors.error,
+  },
+  suggestedShortcut: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: Colors.primaryLight,
+    alignSelf: 'flex-start',
+  },
+  suggestedShortcutText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.primary,
   },
   radioGroup: {
     backgroundColor: Colors.screenBackground,

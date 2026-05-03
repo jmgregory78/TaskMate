@@ -12,9 +12,8 @@ import { useAppStore } from '../../stores/appStore';
 import { useAuth } from '../../hooks/useAuth';
 import ScreenHeader from '../../components/ScreenHeader';
 import { Colors } from '../../constants/colors';
-import { StatusBar } from 'expo-status-bar';
 
-export default function AppGuideScreen() {
+export default function AppTutorialScreen() {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
   const setShowOnboarding = useAppStore((s) => s.setShowOnboarding);
@@ -28,7 +27,7 @@ export default function AppGuideScreen() {
         { merge: true }
       );
     } catch (e) {
-      console.warn('[AppGuide] reset onboarding failed:', e);
+      console.warn('[AppTutorial] reset onboarding failed:', e);
     }
     setShowOnboarding(true);
     navigation.goBack();
@@ -36,8 +35,7 @@ export default function AppGuideScreen() {
 
   return (
     <View style={styles.screen}>
-      <StatusBar style="light" />
-      <ScreenHeader title="App Guide" leftLabel="Back" />
+      <ScreenHeader title="App Tutorial" leftLabel="Back" />
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.card}>
           <Text style={styles.tourEmoji}>🗺️</Text>

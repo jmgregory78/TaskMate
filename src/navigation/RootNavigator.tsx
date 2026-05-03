@@ -35,6 +35,7 @@ import HomeScreen from '../screens/home/HomeScreen';
 import TimelineScreen from '../screens/timeline/TimelineScreen';
 import AddTaskScreen from '../screens/timeline/AddTaskScreen';
 import EditTaskScreen from '../screens/timeline/EditTaskScreen';
+import SuggestedTasksScreen from '../screens/timeline/SuggestedTasksScreen';
 import TaskDetailScreen from '../screens/taskDetail/TaskDetailScreen';
 import AddProductUsageScreen from '../screens/taskDetail/AddProductUsageScreen';
 import LogPurchaseScreen from '../screens/taskDetail/LogPurchaseScreen';
@@ -43,7 +44,7 @@ import SuppliesScreen from '../screens/supplies/SuppliesScreen';
 import CreateProductScreen from '../screens/supplies/CreateProductScreen';
 import EditProductScreen from '../screens/supplies/EditProductScreen';
 import HouseholdSettingsScreen from '../screens/household/HouseholdSettingsScreen';
-import AppGuideScreen from '../screens/appguide/AppGuideScreen';
+import AppTutorialScreen from '../screens/appguide/AppTutorialScreen';
 import FeedbackScreen from '../screens/appguide/FeedbackScreen';
 import PendingPurchasePrompt, {
   PendingItem,
@@ -51,7 +52,11 @@ import PendingPurchasePrompt, {
 import SplashScreen from '../screens/SplashScreen';
 import { navigationRef } from './navigationRef';
 import { Colors } from '../constants/colors';
-import type { Product } from '../types/models';
+import type {
+  Product,
+  RecurrenceFrequency,
+  TaskCategory,
+} from '../types/models';
 
 export type AuthStackParamList = {
   Login: undefined;
@@ -70,7 +75,18 @@ export type MainTabsParamList = {
 
 export type AppStackParamList = {
   Main: undefined;
-  AddTask: undefined;
+  AddTask:
+    | {
+        prefill?: {
+          name?: string;
+          category?: TaskCategory;
+          frequency?: RecurrenceFrequency;
+          interval?: number;
+          reminderDaysBefore?: number;
+        };
+      }
+    | undefined;
+  SuggestedTasks: { preSelected?: string } | undefined;
   TaskDetail: { taskId: string };
   EditTask: { taskId: string; householdId: string };
   AddProductUsage: { householdId: string; taskId: string };
@@ -79,7 +95,7 @@ export type AppStackParamList = {
   CreateProduct: undefined;
   EditProduct: { product: Product };
   HouseholdSettings: undefined;
-  AppGuide: undefined;
+  AppTutorial: undefined;
   Feedback: undefined;
 };
 
@@ -438,6 +454,10 @@ export default function RootNavigator() {
         <AppStack.Navigator screenOptions={{ headerShown: false }}>
           <AppStack.Screen name="Main" component={MainTabs} />
           <AppStack.Screen name="AddTask" component={AddTaskScreen} />
+          <AppStack.Screen
+            name="SuggestedTasks"
+            component={SuggestedTasksScreen}
+          />
           <AppStack.Screen name="TaskDetail" component={TaskDetailScreen} />
           <AppStack.Screen name="EditTask" component={EditTaskScreen} />
           <AppStack.Screen
@@ -461,7 +481,7 @@ export default function RootNavigator() {
             name="HouseholdSettings"
             component={HouseholdSettingsScreen}
           />
-          <AppStack.Screen name="AppGuide" component={AppGuideScreen} />
+          <AppStack.Screen name="AppTutorial" component={AppTutorialScreen} />
           <AppStack.Screen name="Feedback" component={FeedbackScreen} />
         </AppStack.Navigator>
       );

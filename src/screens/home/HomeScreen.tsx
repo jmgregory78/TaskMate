@@ -11,13 +11,24 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { differenceInCalendarDays, format } from 'date-fns';
+import * as Notifications from 'expo-notifications';
 import { useAppStore } from '../../stores/appStore';
-import { getTasks } from '../../services/taskService';
+import {
+  completeTask,
+  getTasks,
+  snoozeTask,
+} from '../../services/taskService';
 import { getProducts } from '../../services/productService';
 import { getHousehold } from '../../services/householdService';
+import {
+  getNotificationPrefs,
+  scheduleAllTaskReminders,
+} from '../../services/notificationService';
 import { Product, stockPercent, Task } from '../../types/models';
 import { getFirstName } from '../../utils/nameUtils';
 import UserAvatar from '../../components/UserAvatar';
+import TaskAlertModal from '../../components/TaskAlertModal';
+import { SnoozeUnit } from '../../components/SnoozeSheet';
 import { Colors } from '../../constants/colors';
 import { Typography } from '../../constants/typography';
 
@@ -141,6 +152,8 @@ export default function HomeScreen() {
   const [products, setProducts] = useState<Product[]>([]);
   const [householdName, setHouseholdName] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const [urgentTasks, setUrgentTasks] = useState<Task[]>([]);
+  const [showAlert, setShowAlert] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -158,6 +171,25 @@ export default function HomeScreen() {
           setProducts(p);
           setHouseholdName(h?.name ?? '');
           setLoading(false);
+
+          const now = new Date();
+          const urgent = t.filter((task) => {
+            if (task.completedToday) return false;
+            if (
+              task.snoozedUntil &&
+              task.snoozedUntil.getTime() > now.getTime()
+            ) {
+              return false;
+            }
+            return differenceInCalendarDays(task.nextDueDate, now) <= 0;
+          });
+          if (urgent.length > 0) {
+            setUrgentTasks(urgent);
+            setShowAlert(true);
+          } else {
+            setUrgentTasks([]);
+            setShowAlert(false);
+          }
         })
         .catch((e) => {
           if (cancelled) return;
@@ -192,6 +224,94 @@ export default function HomeScreen() {
       )
     ).start();
   }, [rating.stars, starAnims]);
+
+  const removeUrgent = (taskId: string) => {
+    setUrgentTasks((prev) => {
+      const next = prev.filter((t) => t.id !== taskId);
+      if (next.length === 0) setShowAlert(false);
+      return next;
+    });
+  };
+
+  const handleAlertComplete = async (task: Task) => {
+    if (!householdId || !currentUser) return;
+    const userLabel =
+      currentUser.displayName ?? currentUser.email ?? currentUser.uid;
+    try {
+      await completeTask(householdId, task.id, userLabel);
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === task.id
+            ? { ...t, completedToday: true, completedAt: new Date() }
+            : t
+        )
+      );
+      removeUrgent(task.id);
+    } catch (e) {
+      console.warn('[HomeScreen] completeTask failed:', e);
+    }
+  };
+
+  const handleAlertSnooze = async (
+    task: Task,
+    amount: number,
+    unit: SnoozeUnit
+  ) => {
+    if (!householdId || !currentUser) return;
+    const snoozeDate =
+      unit === 'minutes'
+        ? new Date(Date.now() + amount * 60 * 1000)
+        : unit === 'hours'
+          ? new Date(Date.now() + amount * 60 * 60 * 1000)
+          : (() => {
+              const d = new Date();
+              d.setDate(d.getDate() + amount);
+              d.setHours(9, 0, 0, 0);
+              return d;
+            })();
+
+    try {
+      await snoozeTask(householdId, task.id, snoozeDate);
+
+      const allTasks = await getTasks(householdId);
+      const prefs = await getNotificationPrefs(currentUser.uid);
+      if (prefs.enabled) {
+        await scheduleAllTaskReminders(
+          allTasks,
+          householdId,
+          prefs.timing,
+          prefs.reminderHour,
+          prefs.reminderMinute
+        );
+      }
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: `${task.icon || '📋'} ${task.name}`,
+          body: 'Snoozed reminder — this task is still due!',
+          data: { taskId: task.id, householdId },
+          sound: true,
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: snoozeDate,
+        },
+      });
+
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === task.id ? { ...t, snoozedUntil: snoozeDate } : t
+        )
+      );
+      removeUrgent(task.id);
+    } catch (e) {
+      console.warn('[HomeScreen] snooze failed:', e);
+    }
+  };
+
+  const handleAlertOpen = (task: Task) => {
+    setShowAlert(false);
+    navigation.navigate('TaskDetail', { taskId: task.id });
+  };
 
   const taskAttention = tasks.filter(
     (t) =>
@@ -438,6 +558,15 @@ export default function HomeScreen() {
           </>
         )}
       </ScrollView>
+
+      <TaskAlertModal
+        tasks={urgentTasks}
+        visible={showAlert && urgentTasks.length > 0}
+        onComplete={handleAlertComplete}
+        onSnooze={handleAlertSnooze}
+        onOpenTask={handleAlertOpen}
+        onDismiss={() => setShowAlert(false)}
+      />
     </View>
   );
 }

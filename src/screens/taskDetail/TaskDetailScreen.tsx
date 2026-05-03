@@ -25,6 +25,8 @@ import {
   getActivityLog,
   getTask,
   getTasks,
+  snoozeTask,
+  updateTask,
 } from '../../services/taskService';
 import { getFirstName } from '../../utils/nameUtils';
 import { sendAssignmentNotification } from '../../services/notificationService';
@@ -53,7 +55,7 @@ import {
 } from '../../components/AssigneeSelector';
 import { reminderLabel } from '../../components/ReminderPicker';
 import DeleteRowButton from '../../components/DeleteRowButton';
-import SnoozeSheet from '../../components/SnoozeSheet';
+import SnoozeSheet, { SnoozeUnit } from '../../components/SnoozeSheet';
 import * as Notifications from 'expo-notifications';
 import { getNotificationPrefs, scheduleAllTaskReminders } from '../../services/notificationService';
 import { Colors } from '../../constants/colors';
@@ -79,6 +81,45 @@ function initialsFor(name: string): string {
   if (parts.length === 0 || !parts[0]) return '?';
   if (parts.length === 1) return parts[0][0]?.toUpperCase() ?? '?';
   return ((parts[0][0] ?? '') + (parts[1][0] ?? '')).toUpperCase();
+}
+
+function formatSnoozeTime(snoozedUntil: Date): string {
+  const now = new Date();
+  const isToday = snoozedUntil.toDateString() === now.toDateString();
+  const isTomorrow = differenceInCalendarDays(snoozedUntil, now) === 1;
+
+  const timeStr = snoozedUntil.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+
+  if (isToday) return timeStr;
+  if (isTomorrow) return `Tomorrow at ${timeStr}`;
+  return (
+    snoozedUntil.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+    }) + ` at ${timeStr}`
+  );
+}
+
+async function cancelTaskNotifications(taskId: string): Promise<void> {
+  try {
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    await Promise.all(
+      scheduled
+        .filter((n) => {
+          const data = n.content.data as { taskId?: unknown } | undefined;
+          return data?.taskId === taskId;
+        })
+        .map((n) =>
+          Notifications.cancelScheduledNotificationAsync(n.identifier)
+        )
+    );
+  } catch (e) {
+    console.warn('[TaskDetail] cancel notifications failed:', e);
+  }
 }
 
 function dueInfo(nextDueDate: Date): { label: string; color: string } {
@@ -228,6 +269,17 @@ export default function TaskDetailScreen() {
         user.displayName ?? user.email ?? user.uid,
         note
       );
+
+      // Clear any active snooze and cancel its scheduled notification(s).
+      if (task.snoozedUntil) {
+        try {
+          await updateTask(householdId, taskId, { snoozedUntil: null });
+        } catch (e) {
+          console.warn('[TaskDetail] clear snoozedUntil failed:', e);
+        }
+      }
+      await cancelTaskNotifications(taskId);
+
       setSheetVisible(false);
       setOverlayTaskName(task.name);
       setOverlayTaskIcon(task.icon ?? '📋');
@@ -258,15 +310,29 @@ export default function TaskDetailScreen() {
     setSheetVisible(false);
   };
 
-  const handleSnooze = async (days: number) => {
+  const handleSnooze = async (amount: number, unit: SnoozeUnit) => {
     if (!task || !householdId || !user?.uid) return;
     setSnoozeSheetVisible(false);
 
-    const snoozeDate = new Date();
-    snoozeDate.setDate(snoozeDate.getDate() + days);
-    snoozeDate.setHours(9, 0, 0, 0);
+    let snoozeDate: Date;
+    if (unit === 'minutes') {
+      snoozeDate = new Date(Date.now() + amount * 60 * 1000);
+    } else if (unit === 'hours') {
+      snoozeDate = new Date(Date.now() + amount * 60 * 60 * 1000);
+    } else {
+      snoozeDate = new Date();
+      snoozeDate.setDate(snoozeDate.getDate() + amount);
+      snoozeDate.setHours(9, 0, 0, 0);
+    }
 
     try {
+      // Cancel any previously scheduled notifications for this task so a
+      // re-snooze doesn't stack reminders from the prior snooze window.
+      await cancelTaskNotifications(task.id);
+
+      // Persist the snoozedUntil so the proactive HomeScreen alert respects it.
+      await snoozeTask(householdId, task.id, snoozeDate);
+
       // Refresh the regular schedule first so the snooze we add survives.
       const allTasks = await getTasks(householdId);
       const prefs = await getNotificationPrefs(user.uid);
@@ -294,14 +360,23 @@ export default function TaskDetailScreen() {
         },
       });
 
-      const dateLabel = snoozeDate.toLocaleDateString('en-US', {
-        weekday: 'long',
-        month: 'short',
-        day: 'numeric',
-      });
-      setSnoozeConfirmation(
-        `Snoozed — reminder set for ${dateLabel} at 9:00 AM`
-      );
+      // Reflect the new snooze immediately in the banner.
+      setTask((prev) => (prev ? { ...prev, snoozedUntil: snoozeDate } : prev));
+
+      let confirmation: string;
+      if (unit === 'hours') {
+        confirmation = `Snoozed — reminder in ${amount} hour${
+          amount === 1 ? '' : 's'
+        }`;
+      } else {
+        const dateLabel = snoozeDate.toLocaleDateString('en-US', {
+          weekday: 'long',
+          month: 'short',
+          day: 'numeric',
+        });
+        confirmation = `Snoozed — reminder set for ${dateLabel} at 9:00 AM`;
+      }
+      setSnoozeConfirmation(confirmation);
       setTimeout(() => setSnoozeConfirmation(null), 3000);
     } catch (e) {
       console.warn('[TaskDetail] snooze failed:', e);
@@ -423,36 +498,62 @@ export default function TaskDetailScreen() {
           </Text>
         </View>
       ) : (() => {
-        const days = differenceInCalendarDays(task.nextDueDate, new Date());
+        const now = new Date();
+        const isSnoozed =
+          !!task.snoozedUntil && task.snoozedUntil.getTime() > now.getTime();
+
+        if (isSnoozed && task.snoozedUntil) {
+          return (
+            <View style={styles.reminderBanner}>
+              <Text style={styles.reminderBannerSnoozedHeader}>
+                😴 Snoozed until {formatSnoozeTime(task.snoozedUntil)}
+              </Text>
+              <Text style={styles.reminderBannerSnoozedSubtext}>
+                Task is still due — complete it or set a new reminder
+              </Text>
+              <View style={styles.reminderBannerActions}>
+                <TouchableOpacity
+                  style={styles.reminderCompleteButton}
+                  onPress={handleOpenComplete}
+                  disabled={actionPending}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.reminderCompleteText}>
+                    ✅ Mark Complete
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.reminderSnoozeButton}
+                  onPress={() => setSnoozeSheetVisible(true)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.reminderSnoozeText}>
+                    😴 Snooze Again
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          );
+        }
+
+        const days = differenceInCalendarDays(task.nextDueDate, now);
         if (days > 7) return null;
-        const variant =
-          days < 0 ? 'overdue' : days <= 1 ? 'soon' : 'upcoming';
-        const urgencyText =
-          days < 0
-            ? `Overdue by ${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'}`
-            : days === 0
-              ? 'Due today!'
-              : days === 1
-                ? 'Due tomorrow'
-                : `Due in ${days} days`;
-        const wrapStyle = [
-          styles.reminderBanner,
-          variant === 'overdue'
-            ? styles.reminderBannerOverdue
-            : variant === 'soon'
-              ? styles.reminderBannerSoon
-              : styles.reminderBannerUpcoming,
-        ];
-        const textStyle =
-          variant === 'overdue'
-            ? styles.reminderBannerTextOverdue
-            : variant === 'soon'
-              ? styles.reminderBannerTextSoon
-              : styles.reminderBannerTextUpcoming;
+        const isOverdue = days < 0;
+        const urgencyText = isOverdue
+          ? `Overdue by ${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'}`
+          : days === 0
+            ? 'Due today!'
+            : days === 1
+              ? 'Due tomorrow'
+              : `Due in ${days} days`;
+        const emoji = isOverdue ? '⚠️' : '🔔';
+        const textStyle = isOverdue
+          ? styles.reminderBannerTextOverdue
+          : styles.reminderBannerTextDefault;
         return (
-          <View style={wrapStyle}>
+          <View style={styles.reminderBanner}>
             <Text style={[styles.reminderBannerHeader, textStyle]}>
-              🔔 {urgencyText}
+              {emoji} {urgencyText}
             </Text>
             <View style={styles.reminderBannerActions}>
               <TouchableOpacity
@@ -726,8 +827,8 @@ export default function TaskDetailScreen() {
       <SnoozeSheet
         visible={snoozeSheetVisible}
         taskName={task.name}
-        onSnooze={(days) => {
-          void handleSnooze(days);
+        onSnooze={(amount, unit) => {
+          void handleSnooze(amount, unit);
         }}
         onCancel={() => setSnoozeSheetVisible(false)}
       />
@@ -754,71 +855,73 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   reminderBanner: {
-    marginTop: 16,
-    marginHorizontal: 16,
-    padding: 14,
+    backgroundColor: '#2D3748',
     borderRadius: 12,
-    borderLeftWidth: 4,
-  },
-  reminderBannerOverdue: {
-    backgroundColor: '#FFF5F5',
-    borderLeftColor: '#E53E3E',
-  },
-  reminderBannerSoon: {
-    backgroundColor: '#FFFBEB',
-    borderLeftColor: '#DD6B20',
-  },
-  reminderBannerUpcoming: {
-    backgroundColor: '#EBF8FF',
-    borderLeftColor: '#3182CE',
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 4,
+    padding: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
   },
   reminderBannerHeader: {
     fontSize: 15,
     fontWeight: '700',
     marginBottom: 12,
   },
+  reminderBannerTextDefault: {
+    color: '#FFFFFF',
+  },
   reminderBannerTextOverdue: {
-    color: '#E53E3E',
+    color: '#FC8181',
   },
-  reminderBannerTextSoon: {
-    color: '#DD6B20',
+  reminderBannerSnoozedHeader: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 4,
   },
-  reminderBannerTextUpcoming: {
-    color: '#2B6CB0',
+  reminderBannerSnoozedSubtext: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 13,
+    marginBottom: 12,
   },
   reminderBannerActions: {
     flexDirection: 'row',
-    alignItems: 'center',
+    gap: 10,
   },
   reminderCompleteButton: {
     flex: 1,
-    marginRight: 8,
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#38A169',
+    backgroundColor: '#319795',
   },
   reminderCompleteText: {
     color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '600',
+    textAlign: 'center',
   },
   reminderSnoozeButton: {
     flex: 1,
-    marginLeft: 8,
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.screenBackground,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
   },
   reminderSnoozeText: {
-    color: Colors.textSecondary,
+    color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '600',
+    textAlign: 'center',
   },
   snoozeConfirmation: {
     marginTop: 8,

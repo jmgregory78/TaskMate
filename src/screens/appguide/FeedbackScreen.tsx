@@ -12,7 +12,6 @@ import {
   Keyboard,
   View,
 } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
 import { useAuth } from '../../hooks/useAuth';
 import { submitFeedback } from '../../services/feedbackService';
 import ScreenHeader from '../../components/ScreenHeader';
@@ -72,7 +71,6 @@ export default function FeedbackScreen() {
 
   return (
     <View style={styles.screen}>
-      <StatusBar style="light" />
       <ScreenHeader title="Send Feedback" leftLabel="Back" />
       <KeyboardAvoidingView
         style={styles.flex}

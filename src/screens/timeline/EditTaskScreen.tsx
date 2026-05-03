@@ -44,7 +44,6 @@ import ScreenHeader from '../../components/ScreenHeader';
 import ReminderPicker from '../../components/ReminderPicker';
 import { sendAssignmentNotification } from '../../services/notificationService';
 import { getFirstName } from '../../utils/nameUtils';
-import { StatusBar } from 'expo-status-bar';
 import { Colors } from '../../constants/colors';
 
 type EditTaskRoute = RouteProp<
@@ -343,7 +342,6 @@ export default function EditTaskScreen() {
   if (loading) {
     return (
       <View style={styles.screen}>
-        <StatusBar style="dark" />
         <ScreenHeader title="Edit Task" leftLabel="Back" />
         <View style={styles.center}>
           <ActivityIndicator size="large" color={Colors.primary} />
@@ -355,7 +353,6 @@ export default function EditTaskScreen() {
   if (loadError || !task) {
     return (
       <View style={styles.screen}>
-        <StatusBar style="dark" />
         <ScreenHeader title="Edit Task" leftLabel="Back" />
         <View style={styles.center}>
           <Text style={styles.errorText}>{loadError ?? 'Task not found'}</Text>
@@ -366,7 +363,6 @@ export default function EditTaskScreen() {
 
   return (
     <View style={styles.screen}>
-      <StatusBar style="dark" />
       <ScreenHeader
         title="Edit Task"
         leftLabel="Back"

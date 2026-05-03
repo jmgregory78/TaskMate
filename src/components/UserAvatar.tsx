@@ -69,22 +69,30 @@ export default function UserAvatar({
 
   useEffect(() => {
     let cancelled = false;
-    if (!user?.uid || !householdId) {
-      setUnreadFeedback(0);
-      return;
-    }
+    // Hide the badge until we confirm BOTH ownership and a positive count.
+    setUnreadFeedback(0);
+    if (!user?.uid || !householdId) return;
     void (async () => {
       try {
         const members = await getHouseholdMembers(householdId);
+        if (cancelled) return;
         const me = members.find((m) => m.userId === user.uid);
-        if (!me || me.role !== 'owner') {
-          if (!cancelled) setUnreadFeedback(0);
+        if (!me || me.role !== 'owner') return;
+
+        let count = 0;
+        try {
+          count = await getUnreadFeedbackCount();
+        } catch (e) {
+          console.warn('[UserAvatar] getUnreadFeedbackCount failed:', e);
           return;
         }
-        const count = await getUnreadFeedbackCount();
-        if (!cancelled) setUnreadFeedback(count);
+        if (cancelled) return;
+        if (typeof count === 'number' && count > 0) {
+          setUnreadFeedback(count);
+        }
       } catch (e) {
         console.warn('[UserAvatar] feedback badge load failed:', e);
+        if (!cancelled) setUnreadFeedback(0);
       }
     })();
     return () => {
@@ -269,10 +277,10 @@ function ProfileDropdown({
         />
         <DropdownItem
           icon="📖"
-          label="App Guide"
+          label="App Tutorial"
           onPress={() => {
             onClose();
-            navigation.navigate('AppGuide');
+            navigation.navigate('AppTutorial');
           }}
         />
         <DropdownItem

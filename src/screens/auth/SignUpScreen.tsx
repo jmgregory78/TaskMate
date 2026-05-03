@@ -15,7 +15,6 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../../hooks/useAuth';
 import type { AuthStackParamList } from '../../navigation/RootNavigator';
-import { StatusBar } from 'expo-status-bar';
 import { Colors } from '../../constants/colors';
 
 type SignUpNavProp = NativeStackNavigationProp<AuthStackParamList, 'SignUp'>;
@@ -53,8 +52,6 @@ export default function SignUpScreen() {
   };
 
   return (
-    <>
-    <StatusBar style="dark" />
     <KeyboardAvoidingView
       style={styles.flex}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -126,7 +123,6 @@ export default function SignUpScreen() {
         </View>
       </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
-    </>
   );
 }
 

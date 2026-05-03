@@ -20,7 +20,6 @@ import {
   updateProduct,
 } from '../../services/productService';
 import { Product } from '../../types/models';
-import { StatusBar } from 'expo-status-bar';
 import { Colors } from '../../constants/colors';
 
 type Route = RouteProp<{ EditProduct: { product: Product } }, 'EditProduct'>;
@@ -127,8 +126,6 @@ export default function EditProductScreen() {
   };
 
   return (
-    <>
-    <StatusBar style="dark" />
     <ScreenWrapper contentContainerStyle={styles.content}>
       <View style={styles.headerRow}>
         <TouchableOpacity
@@ -138,15 +135,7 @@ export default function EditProductScreen() {
           <Text style={styles.backLink}>← Back</Text>
         </TouchableOpacity>
         <Text style={styles.heading}>Edit Supply</Text>
-        <TouchableOpacity
-          onPress={handleSave}
-          disabled={!canSave}
-          activeOpacity={0.7}
-        >
-          <Text style={[styles.saveLink, !canSave && styles.saveLinkDisabled]}>
-            Save
-          </Text>
-        </TouchableOpacity>
+        <View style={{ width: 80 }} />
       </View>
 
       <View style={styles.card}>
@@ -233,7 +222,6 @@ export default function EditProductScreen() {
         <Text style={styles.deleteLinkText}>Delete Supply</Text>
       </TouchableOpacity>
     </ScreenWrapper>
-    </>
   );
 }
 

@@ -303,46 +303,31 @@ export default function SuppliesScreen() {
     ]);
   };
 
+  let body: React.ReactNode;
   if (loading) {
-    return (
-      <View style={styles.container}>
-        <Header />
-        <View style={styles.center}>
-          <ActivityIndicator size="large" />
-        </View>
+    body = (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" />
       </View>
     );
-  }
-
-  if (error) {
-    return (
-      <View style={styles.container}>
-        <Header />
-        <View style={styles.center}>
-          <Text style={styles.errorText}>{error}</Text>
-        </View>
+  } else if (error) {
+    body = (
+      <View style={styles.center}>
+        <Text style={styles.errorText}>{error}</Text>
       </View>
     );
-  }
-
-  if (rows.length === 0) {
-    return (
-      <View style={styles.container}>
-        <Header />
-        <View style={styles.center}>
-          <Text style={styles.emptyEmoji}>🛒</Text>
-          <Text style={styles.emptyTitle}>No supplies tracked yet</Text>
-          <Text style={styles.emptyText}>
-            Add supplies to your tasks to track inventory here.
-          </Text>
-        </View>
+  } else if (rows.length === 0) {
+    body = (
+      <View style={styles.center}>
+        <Text style={styles.emptyEmoji}>🛒</Text>
+        <Text style={styles.emptyTitle}>No supplies tracked yet</Text>
+        <Text style={styles.emptyText}>
+          Add supplies to your tasks to track inventory here.
+        </Text>
       </View>
     );
-  }
-
-  return (
-    <View style={styles.container}>
-      <Header />
+  } else {
+    body = (
       <ScrollView
         contentContainerStyle={styles.list}
         onScroll={handleScroll}
@@ -386,6 +371,13 @@ export default function SuppliesScreen() {
           )}
         </View>
       </ScrollView>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <Header />
+      {body}
       <FAB
         onPress={() => navigation.navigate('CreateProduct')}
         scrollScale={fabScale}
@@ -500,6 +492,7 @@ function SupplyCard({ row, onTap, onBuy, onMenu }: SupplyCardProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    position: 'relative',
     backgroundColor: Colors.screenBackground,
   },
   safeTop: {

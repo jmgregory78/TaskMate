@@ -13,7 +13,6 @@ import ScreenHeader from '../../components/ScreenHeader';
 import { useAuth } from '../../hooks/useAuth';
 import { useAppStore } from '../../stores/appStore';
 import { createProduct } from '../../services/productService';
-import { StatusBar } from 'expo-status-bar';
 import { Colors } from '../../constants/colors';
 
 function parseNumber(value: string, fallback: number): number {
@@ -74,13 +73,10 @@ export default function CreateProductScreen() {
 
   return (
     <>
-      <StatusBar style="dark" />
       <ScreenHeader
         title="New Supply"
         leftLabel="Supplies"
-        rightLabel={submitting ? '...' : 'Save'}
-        rightDisabled={!canSubmit}
-        onRightPress={handleSubmit}
+        rightContent={<View style={{ width: 80 }} />}
       />
       <ScreenWrapper contentContainerStyle={styles.content}>
         <View style={styles.card}>
