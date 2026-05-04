@@ -33,6 +33,8 @@ import StockOverviewCard from '../../components/StockOverviewCard';
 import UserAvatar from '../../components/UserAvatar';
 import FAB from '../../components/FAB';
 import SupplyTypeSheet from '../../components/SupplyTypeSheet';
+import PurchaseLinkSheet from '../../components/PurchaseLinkSheet';
+import { openPurchaseUrl } from '../../utils/purchaseLink';
 import { Colors } from '../../constants/colors';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -73,6 +75,9 @@ export default function SuppliesScreen() {
   const [error, setError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'stock' | 'alpha' | 'task'>('stock');
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [linkSheetProduct, setLinkSheetProduct] = useState<Product | null>(
+    null
+  );
 
   const openSuggested = () => {
     setSheetOpen(false);
@@ -248,18 +253,39 @@ export default function SuppliesScreen() {
 
   const handleBuy = async (product: Product) => {
     if (!householdId) return;
+    const trimmedUrl = (product.amazonUrl ?? '').trim();
+    if (trimmedUrl.length === 0) {
+      // No URL on file — prompt the user to add one (teach-by-doing).
+      // Don't flag purchase-pending until they actually choose to open.
+      setLinkSheetProduct(product);
+      return;
+    }
     try {
       await flagPurchasePending(householdId, product.id);
     } catch (e) {
       console.warn('[Supplies] flagPurchasePending failed:', e);
     }
-    try {
-      const ok = await Linking.canOpenURL(product.amazonUrl);
-      if (ok) await Linking.openURL(product.amazonUrl);
-      else Alert.alert('Cannot open URL', product.amazonUrl);
-    } catch (e) {
-      const err = e as { message?: string };
-      Alert.alert('Could not open link', err.message ?? String(e));
+    await openPurchaseUrl(trimmedUrl);
+  };
+
+  const handleLinkSheetClose = (savedUrl?: string) => {
+    const product = linkSheetProduct;
+    setLinkSheetProduct(null);
+    if (product && savedUrl && householdId) {
+      // The user saved a URL and we're about to open it — flag pending so the
+      // post-purchase prompt fires next time the app comes to foreground, and
+      // reflect the saved URL in our local rows so subsequent Buy taps don't
+      // re-prompt within the same session.
+      flagPurchasePending(householdId, product.id).catch((e) => {
+        console.warn('[Supplies] flagPurchasePending failed:', e);
+      });
+      setRows((prev) =>
+        prev.map((r) =>
+          r.product.id === product.id
+            ? { ...r, product: { ...r.product, amazonUrl: savedUrl } }
+            : r
+        )
+      );
     }
   };
 
@@ -398,6 +424,11 @@ export default function SuppliesScreen() {
         onClose={() => setSheetOpen(false)}
         onSuggested={openSuggested}
         onCustom={openCustom}
+      />
+      <PurchaseLinkSheet
+        product={linkSheetProduct}
+        householdId={householdId}
+        onClose={handleLinkSheetClose}
       />
     </View>
   );

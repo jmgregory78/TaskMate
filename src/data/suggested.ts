@@ -217,9 +217,9 @@ export const SUGGESTED_SUPPLIES: SuggestedSupplyCategory[] = [
     emoji: '🚗',
     name: 'Vehicles',
     supplies: [
-      { id: 'wipers', name: 'Windshield Wipers', defaultQty: 1, unit: 'pair', icon: '🚗' },
-      { id: 'cabin-filter', name: 'Car Cabin Air Filter', defaultQty: 1, unit: 'filter', icon: '🌬️' },
-      { id: 'small-engine-oil', name: 'Small Engine Oil (Lawnmower/Pressure Washer)', defaultQty: 1, unit: 'quart', icon: '🛢️' },
+      { id: 'wipers', name: 'Windshield Wipers', defaultQty: 1, unit: 'pairs', icon: '🚗' },
+      { id: 'cabin-filter', name: 'Car Cabin Air Filter', defaultQty: 1, unit: 'filters', icon: '🌬️' },
+      { id: 'small-engine-oil', name: 'Small Engine Oil (Lawnmower/Pressure Washer)', defaultQty: 2, unit: 'quarts', icon: '🛢️' },
       { id: 'spark-plugs', name: 'Spark Plugs (Small Engine)', defaultQty: 4, unit: 'plugs', notes: 'For lawnmower, pressure washer, generator', icon: '🔌' },
       { id: 'pressure-washer-nozzles', name: 'Pressure Washer Nozzle Set', defaultQty: 1, unit: 'set', icon: '💦' },
     ],
@@ -239,8 +239,8 @@ export const SUGGESTED_SUPPLIES: SuggestedSupplyCategory[] = [
     name: 'Outdoor & Garden',
     supplies: [
       { id: 'lawn-fertilizer', name: 'Lawn Fertilizer', defaultQty: 2, unit: 'bags', icon: '🌱' },
-      { id: 'pest-control', name: 'Pest Control Spray/Bait', defaultQty: 1, unit: 'pack', icon: '🐜' },
-      { id: 'ice-melt', name: 'Ice Melt / Rock Salt', defaultQty: 1, unit: 'bag', icon: '❄️' },
+      { id: 'pest-control', name: 'Pest Control Spray/Bait', defaultQty: 2, unit: 'cans', icon: '🐜' },
+      { id: 'ice-melt', name: 'Ice Melt / Rock Salt', defaultQty: 1, unit: 'bags', icon: '❄️' },
       { id: 'softener-salt', name: 'Water Softener Salt', defaultQty: 2, unit: 'bags', icon: '🧂' },
     ],
   },
@@ -259,7 +259,7 @@ export const SUGGESTED_SUPPLIES: SuggestedSupplyCategory[] = [
     emoji: '🏊',
     name: 'Pool & Spa',
     supplies: [
-      { id: 'pool-chlorine', name: 'Pool Chlorine Tablets', defaultQty: 1, unit: 'bucket', icon: '🏊' },
+      { id: 'pool-chlorine', name: 'Pool Chlorine Tablets', defaultQty: 50, unit: 'tablets', icon: '🏊' },
       { id: 'pool-shock', name: 'Pool Shock', defaultQty: 4, unit: 'bags', icon: '⚡' },
       { id: 'hot-tub-chemicals', name: 'Hot Tub Chemicals', defaultQty: 1, unit: 'kit', icon: '♨️' },
     ],
@@ -269,7 +269,7 @@ export const SUGGESTED_SUPPLIES: SuggestedSupplyCategory[] = [
     emoji: '⚡',
     name: 'Emergency & Seasonal',
     supplies: [
-      { id: 'fuel-stabilizer', name: 'Generator Fuel Stabilizer', defaultQty: 1, unit: 'bottle', icon: '⛽' },
+      { id: 'fuel-stabilizer', name: 'Generator Fuel Stabilizer', defaultQty: 1, unit: 'bottles', icon: '⛽' },
       { id: 'septic-tablets', name: 'Septic Treatment Tablets', defaultQty: 12, unit: 'tablets', icon: '🚽' },
     ],
   },

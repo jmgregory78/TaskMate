@@ -22,6 +22,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useAppStore } from '../../stores/appStore';
 import { createTask, getTasks } from '../../services/taskService';
 import {
+  addProductUsageToTask,
   createProduct,
   getProducts,
   updateProduct,
@@ -68,11 +69,16 @@ type SupplyPromptState =
   | {
       scenario: 'add';
       supply: SuggestedSupply;
+      // Id of the task that triggered this prompt — captured so we can write
+      // a TaskProductUsage record linking the new supply to the just-created
+      // task (so the supply detail page shows it as linked).
+      taskId: string;
     }
   | {
       scenario: 'update';
       supply: SuggestedSupply;
       product: Product;
+      taskId: string;
     };
 
 const TOTAL_STEPS = 4;
@@ -85,7 +91,7 @@ const FREQUENCY_OPTIONS: { key: RecurrenceFrequency; label: string }[] = [
 ];
 
 const REMINDER_OPTIONS: { days: number | null; label: string }[] = [
-  { days: null, label: 'No Reminder' },
+  { days: null, label: 'No Advance Reminder' },
   { days: 1, label: '1 day before' },
   { days: 3, label: '3 days before' },
   { days: 7, label: '1 week before' },
@@ -352,7 +358,7 @@ export default function SetupWizardScreen() {
     setSubmitError(null);
     const userLabel = user.displayName ?? user.email ?? user.uid;
     try {
-      await createTask(
+      const newTaskId = await createTask(
         householdId,
         userLabel,
         {
@@ -382,9 +388,14 @@ export default function SetupWizardScreen() {
           (p) => normalize(p.name) === normalize(supply.name)
         );
         if (existing) {
-          setSupplyPrompt({ scenario: 'update', supply, product: existing });
+          setSupplyPrompt({
+            scenario: 'update',
+            supply,
+            product: existing,
+            taskId: newTaskId,
+          });
         } else {
-          setSupplyPrompt({ scenario: 'add', supply });
+          setSupplyPrompt({ scenario: 'add', supply, taskId: newTaskId });
         }
         return; // queue advance happens after the prompt resolves
       }
@@ -409,6 +420,7 @@ export default function SetupWizardScreen() {
     if (!user || !householdId) return;
     const userLabel = user.displayName ?? user.email ?? user.uid;
     const supply = supplyPrompt.supply;
+    const taskId = supplyPrompt.taskId;
     try {
       const newId = await createProduct(householdId, userLabel, {
         householdId,
@@ -419,6 +431,23 @@ export default function SetupWizardScreen() {
         currentQuantity: qty,
         lowThresholdPercent: 25,
       });
+      // Link the new supply to the task that triggered this prompt by writing
+      // a TaskProductUsage record. Default usage = 1 of the supply's unit per
+      // task completion. Without this, the supply detail page would show
+      // "Not yet linked to any task" even though the user just created it
+      // through the per-task wizard flow.
+      try {
+        await addProductUsageToTask(
+          householdId,
+          taskId,
+          newId,
+          supply.name,
+          1,
+          supply.unit
+        );
+      } catch (e) {
+        console.warn('[SetupWizard] link new supply to task failed:', e);
+      }
       // Reflect the new product locally so a subsequent prompt for the same
       // supply (shouldn't happen due to promptedSupplyIds, but defensive)
       // would see scenario 'update', and the supplies-step filtering hides it.
@@ -457,6 +486,8 @@ export default function SetupWizardScreen() {
     if (supplyPrompt?.scenario !== 'update') return;
     if (!householdId) return;
     const product = supplyPrompt.product;
+    const supply = supplyPrompt.supply;
+    const taskId = supplyPrompt.taskId;
     try {
       await updateProduct(householdId, product.id, { currentQuantity: qty });
       setExistingProducts((prev) =>
@@ -466,6 +497,21 @@ export default function SetupWizardScreen() {
       );
     } catch (e) {
       console.warn('[SetupWizard] supply prompt update failed:', e);
+    }
+    // Also link the existing supply to the just-created task. Without this,
+    // the user has the supply on hand but the supply detail screen wouldn't
+    // know the new task uses it.
+    try {
+      await addProductUsageToTask(
+        householdId,
+        taskId,
+        product.id,
+        product.name,
+        1,
+        product.containerUnit || supply.unit
+      );
+    } catch (e) {
+      console.warn('[SetupWizard] link existing supply to task failed:', e);
     }
     closeSupplyPromptAndAdvance();
   };
@@ -1076,31 +1122,38 @@ function ConfigureTaskStep({
           </Text>
         </View>
 
-        <Text style={styles.fieldLabel}>Remind me</Text>
+        <Text style={styles.fieldLabel}>Advance Reminder</Text>
         <View style={styles.reminderColumn}>
-          {REMINDER_OPTIONS.map((opt) => {
+          {REMINDER_OPTIONS.map((opt, idx) => {
             const active = opt.days === draft.reminderDays;
             const key = opt.days === null ? 'none' : String(opt.days);
+            const isNoAdvanceReminder = opt.days === null;
             return (
-              <TouchableOpacity
-                key={key}
-                style={[styles.reminderRow, active && styles.reminderRowOn]}
-                onPress={() => onUpdateDraft({ reminderDays: opt.days })}
-                activeOpacity={0.7}
-                disabled={submitting}
-              >
-                <Text
-                  style={[
-                    styles.reminderText,
-                    active && styles.reminderTextOn,
-                  ]}
+              <View key={key}>
+                <TouchableOpacity
+                  style={[styles.reminderRow, active && styles.reminderRowOn]}
+                  onPress={() => onUpdateDraft({ reminderDays: opt.days })}
+                  activeOpacity={0.7}
+                  disabled={submitting}
                 >
-                  {opt.label}
-                </Text>
-                {active ? (
-                  <Text style={styles.reminderCheck}>✓</Text>
+                  <Text
+                    style={[
+                      styles.reminderText,
+                      active && styles.reminderTextOn,
+                    ]}
+                  >
+                    {opt.label}
+                  </Text>
+                  {active ? (
+                    <Text style={styles.reminderCheck}>✓</Text>
+                  ) : null}
+                </TouchableOpacity>
+                {isNoAdvanceReminder ? (
+                  <Text style={styles.reminderSubtitle}>
+                    You'll still get a task alert on the due date
+                  </Text>
                 ) : null}
-              </TouchableOpacity>
+              </View>
             );
           })}
         </View>
@@ -1882,5 +1935,12 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     fontSize: 18,
     fontWeight: '800',
+  },
+  reminderSubtitle: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginTop: 4,
+    marginBottom: 2,
+    marginLeft: 14,
   },
 });

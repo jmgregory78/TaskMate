@@ -174,7 +174,9 @@ export default function LogPurchaseScreen() {
         keyboardType="decimal-pad"
       />
 
-      <Text style={styles.label}>Quantity purchased (containers)</Text>
+      <Text style={styles.label}>
+        Quantity purchased{product.containerUnit ? ` (${product.containerUnit})` : ''}
+      </Text>
       <TextInput
         style={styles.input}
         value={quantityText}

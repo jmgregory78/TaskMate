@@ -56,6 +56,8 @@ import {
 import { reminderLabel } from '../../components/ReminderPicker';
 import DeleteRowButton from '../../components/DeleteRowButton';
 import SnoozeSheet, { SnoozeUnit } from '../../components/SnoozeSheet';
+import PurchaseLinkSheet from '../../components/PurchaseLinkSheet';
+import { openPurchaseUrl } from '../../utils/purchaseLink';
 import * as Notifications from 'expo-notifications';
 import { getNotificationPrefs, scheduleAllTaskReminders } from '../../services/notificationService';
 import { Colors } from '../../constants/colors';
@@ -161,6 +163,9 @@ export default function TaskDetailScreen() {
   const [overlayTaskName, setOverlayTaskName] = useState('');
   const [overlayTaskIcon, setOverlayTaskIcon] = useState('📋');
   const [snoozeSheetVisible, setSnoozeSheetVisible] = useState(false);
+  const [linkSheetProduct, setLinkSheetProduct] = useState<Product | null>(
+    null
+  );
   const [snoozeConfirmation, setSnoozeConfirmation] = useState<string | null>(
     null
   );
@@ -207,18 +212,26 @@ export default function TaskDetailScreen() {
 
   const handleBuyOnAmazon = async (product: Product) => {
     if (!householdId) return;
+    const trimmedUrl = (product.amazonUrl ?? '').trim();
+    if (trimmedUrl.length === 0) {
+      setLinkSheetProduct(product);
+      return;
+    }
     try {
       await flagPurchasePending(householdId, product.id);
     } catch (e) {
       console.warn('[TaskDetail] flagPurchasePending failed:', e);
     }
-    try {
-      const supported = await Linking.canOpenURL(product.amazonUrl);
-      if (supported) await Linking.openURL(product.amazonUrl);
-      else Alert.alert('Cannot open URL', product.amazonUrl);
-    } catch (e) {
-      const err = e as { message?: string };
-      Alert.alert('Could not open link', err.message ?? String(e));
+    await openPurchaseUrl(trimmedUrl);
+  };
+
+  const handleLinkSheetClose = (savedUrl?: string) => {
+    const product = linkSheetProduct;
+    setLinkSheetProduct(null);
+    if (product && savedUrl && householdId) {
+      flagPurchasePending(householdId, product.id).catch((e) => {
+        console.warn('[TaskDetail] flagPurchasePending failed:', e);
+      });
     }
   };
 
@@ -831,6 +844,11 @@ export default function TaskDetailScreen() {
           void handleSnooze(amount, unit);
         }}
         onCancel={() => setSnoozeSheetVisible(false)}
+      />
+      <PurchaseLinkSheet
+        product={linkSheetProduct}
+        householdId={householdId}
+        onClose={handleLinkSheetClose}
       />
     </>
   );

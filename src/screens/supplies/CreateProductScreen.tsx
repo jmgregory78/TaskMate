@@ -43,7 +43,11 @@ export default function CreateProductScreen() {
 
     const containerSizeN = parseNumber(containerSize, 0);
     if (containerSizeN <= 0) {
-      setError('Container size must be greater than 0.');
+      setError('Quantity when full must be greater than 0.');
+      return;
+    }
+    if (containerUnit.trim().length === 0) {
+      setError('Unit is required — e.g. filters, doses, bags.');
       return;
     }
     const qty =
@@ -105,26 +109,26 @@ export default function CreateProductScreen() {
           Paste an Amazon, Home Depot, or any store link
         </Text>
 
-        <Text style={styles.label}>Container size</Text>
-        <Text style={styles.hint}>How much is in one container?</Text>
-        <View style={styles.row}>
-          <TextInput
-            style={[styles.input, styles.sizeInput]}
-            value={containerSize}
-            onChangeText={setContainerSize}
-            keyboardType="decimal-pad"
-            placeholder="32"
-            placeholderTextColor={Colors.textLight}
-          />
-          <TextInput
-            style={[styles.input, styles.unitInput]}
-            value={containerUnit}
-            onChangeText={setContainerUnit}
-            placeholder="oz"
-            placeholderTextColor={Colors.textLight}
-            autoCapitalize="none"
-          />
-        </View>
+        <Text style={styles.label}>Quantity when full</Text>
+        <Text style={styles.hint}>How many do you have when fully stocked?</Text>
+        <TextInput
+          style={styles.input}
+          value={containerSize}
+          onChangeText={setContainerSize}
+          keyboardType="decimal-pad"
+          placeholder="60"
+          placeholderTextColor={Colors.textLight}
+        />
+
+        <Text style={styles.label}>Unit (e.g. filters, doses, bags)</Text>
+        <TextInput
+          style={styles.input}
+          value={containerUnit}
+          onChangeText={setContainerUnit}
+          placeholder="filters"
+          placeholderTextColor={Colors.textLight}
+          autoCapitalize="none"
+        />
 
         <Text style={styles.label}>Current quantity on hand</Text>
         <TextInput

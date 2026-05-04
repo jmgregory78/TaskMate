@@ -36,6 +36,8 @@ import InventoryBar from '../../components/InventoryBar';
 import UpdateStockSheet from '../../components/UpdateStockSheet';
 import ScreenHeader from '../../components/ScreenHeader';
 import DeleteRowButton from '../../components/DeleteRowButton';
+import PurchaseLinkSheet from '../../components/PurchaseLinkSheet';
+import { openPurchaseUrl } from '../../utils/purchaseLink';
 import { useAuth } from '../../hooks/useAuth';
 import { Colors } from '../../constants/colors';
 
@@ -75,6 +77,7 @@ export default function ProductDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [stockSheetVisible, setStockSheetVisible] = useState(false);
+  const [linkSheetOpen, setLinkSheetOpen] = useState(false);
   const [successBanner, setSuccessBanner] = useState<string | null>(null);
   const [showPurchaseHistory, setShowPurchaseHistory] = useState(false);
 
@@ -182,18 +185,26 @@ export default function ProductDetailScreen() {
 
   const handleBuy = async () => {
     if (!product) return;
+    const trimmedUrl = (product.amazonUrl ?? '').trim();
+    if (trimmedUrl.length === 0) {
+      setLinkSheetOpen(true);
+      return;
+    }
     try {
       await flagPurchasePending(householdId, product.id);
     } catch (e) {
       console.warn('[ProductDetail] flagPurchasePending failed:', e);
     }
-    try {
-      const ok = await Linking.canOpenURL(product.amazonUrl);
-      if (ok) await Linking.openURL(product.amazonUrl);
-      else Alert.alert('Cannot open URL', product.amazonUrl);
-    } catch (e) {
-      const err = e as { message?: string };
-      Alert.alert('Could not open link', err.message ?? String(e));
+    await openPurchaseUrl(trimmedUrl);
+  };
+
+  const handleLinkSheetClose = (savedUrl?: string) => {
+    setLinkSheetOpen(false);
+    if (product && savedUrl) {
+      flagPurchasePending(householdId, product.id).catch((e) => {
+        console.warn('[ProductDetail] flagPurchasePending failed:', e);
+      });
+      setProduct({ ...product, amazonUrl: savedUrl });
     }
   };
 
@@ -279,10 +290,14 @@ export default function ProductDetailScreen() {
         <Text style={styles.sectionHeader}>Stock</Text>
         <InventoryBar product={product} showLabel={false} />
         <Text style={styles.statText}>
-          {product.currentQuantity} {product.containerUnit} on hand ·{' '}
-          {applicationsRemaining}{' '}
-          {applicationsRemaining === 1 ? 'use' : 'uses'} left
+          {product.currentQuantity} {product.containerUnit} on hand
+          {usageRefs.length === 0
+            ? ''
+            : ` · ${applicationsRemaining} ${applicationsRemaining === 1 ? 'use' : 'uses'} left`}
         </Text>
+        {usageRefs.length === 0 ? (
+          <Text style={styles.metaText}>Link a task to track usage</Text>
+        ) : null}
         <Text style={styles.metaText}>
           Estimated run out:{' '}
           {runOutDate ? format(runOutDate, 'MMMM yyyy') : '—'}
@@ -385,6 +400,11 @@ export default function ProductDetailScreen() {
         product={product}
         onSave={handleStockSave}
         onCancel={() => setStockSheetVisible(false)}
+      />
+      <PurchaseLinkSheet
+        product={linkSheetOpen ? product : null}
+        householdId={householdId}
+        onClose={handleLinkSheetClose}
       />
     </>
   );

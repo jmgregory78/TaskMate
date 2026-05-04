@@ -4,7 +4,9 @@
       "Bash(npx create-expo-app@latest . --template blank-typescript)",
       "Bash(npx create-expo-app@latest . --template blank-typescript --yes)",
       "Bash(npx expo *)",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ]
   }
 }

@@ -647,7 +647,7 @@ export default function AddTaskScreen() {
         </View>
       )}
 
-      <Text style={styles.sectionHeader}>🔔 Remind me</Text>
+      <Text style={styles.sectionHeader}>🔔 Advance Reminder</Text>
       <ReminderPicker
         value={reminderDaysBefore}
         onChange={setReminderDaysBefore}
