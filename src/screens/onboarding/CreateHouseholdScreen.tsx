@@ -101,7 +101,7 @@ export default function CreateHouseholdScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
         <View style={styles.flex}>
@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
   bottom: {
     paddingHorizontal: 24,
     paddingTop: 24,
-    paddingBottom: 32,
+    paddingBottom: 100,
   },
   card: {
     backgroundColor: Colors.cardBackground,

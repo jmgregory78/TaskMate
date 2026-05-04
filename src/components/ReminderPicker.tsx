@@ -8,16 +8,17 @@ import {
 import { Colors } from '../constants/colors';
 
 interface Props {
-  value: number;
-  onChange: (next: number) => void;
+  value: number | null;
+  onChange: (next: number | null) => void;
 }
 
 interface Preset {
   label: string;
-  value: number;
+  value: number | null;
 }
 
 const PRESETS: Preset[] = [
+  { label: 'No Reminder', value: null },
   { label: 'Same day', value: 0 },
   { label: '1 day before', value: 1 },
   { label: '3 days before', value: 3 },
@@ -26,9 +27,14 @@ const PRESETS: Preset[] = [
   { label: '1 month before', value: 30 },
 ];
 
-const PRESET_VALUES = new Set(PRESETS.map((p) => p.value));
+const PRESET_NUMERIC_VALUES = new Set(
+  PRESETS.map((p) => p.value).filter(
+    (v): v is number => typeof v === 'number'
+  )
+);
 
 export function reminderLabel(daysBefore: number | undefined | null): string {
+  if (daysBefore === null) return 'No Reminder';
   const d = typeof daysBefore === 'number' ? daysBefore : 1;
   if (d === 0) return 'Same day';
   if (d === 1) return '1 day before';
@@ -36,7 +42,7 @@ export function reminderLabel(daysBefore: number | undefined | null): string {
 }
 
 export default function ReminderPicker({ value, onChange }: Props) {
-  const isCustom = !PRESET_VALUES.has(value);
+  const isCustom = value !== null && !PRESET_NUMERIC_VALUES.has(value);
 
   const handleSelectCustom = () => {
     if (isCustom) return;
@@ -60,9 +66,10 @@ export default function ReminderPicker({ value, onChange }: Props) {
       <View style={styles.row}>
         {PRESETS.map((p) => {
           const active = value === p.value;
+          const key = p.value === null ? 'none' : String(p.value);
           return (
             <TouchableOpacity
-              key={p.value}
+              key={key}
               style={[styles.pill, active && styles.pillActive]}
               onPress={() => onChange(p.value)}
               activeOpacity={0.7}

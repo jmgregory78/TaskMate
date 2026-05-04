@@ -28,6 +28,7 @@ import { Product, stockPercent, Task } from '../../types/models';
 import { getFirstName } from '../../utils/nameUtils';
 import UserAvatar from '../../components/UserAvatar';
 import TaskAlertModal from '../../components/TaskAlertModal';
+import Toast from '../../components/Toast';
 import { SnoozeUnit } from '../../components/SnoozeSheet';
 import { Colors } from '../../constants/colors';
 import { Typography } from '../../constants/typography';
@@ -154,6 +155,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [urgentTasks, setUrgentTasks] = useState<Task[]>([]);
   const [showAlert, setShowAlert] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -311,6 +313,18 @@ export default function HomeScreen() {
   const handleAlertOpen = (task: Task) => {
     setShowAlert(false);
     navigation.navigate('TaskDetail', { taskId: task.id });
+  };
+
+  const handleAlertDismissAndSnooze = async (task: Task) => {
+    // Close the modal immediately, then snooze the current task to tomorrow
+    // 9:00am via the existing snooze pipeline (also reschedules notifications).
+    setShowAlert(false);
+    try {
+      await handleAlertSnooze(task, 1, 'days');
+      setToastMessage('Snoozed until tomorrow');
+    } catch (e) {
+      console.warn('[HomeScreen] dismiss-and-snooze failed:', e);
+    }
   };
 
   const taskAttention = tasks.filter(
@@ -564,8 +578,13 @@ export default function HomeScreen() {
         visible={showAlert && urgentTasks.length > 0}
         onComplete={handleAlertComplete}
         onSnooze={handleAlertSnooze}
+        onSnoozeUntilTomorrow={handleAlertDismissAndSnooze}
         onOpenTask={handleAlertOpen}
         onDismiss={() => setShowAlert(false)}
+      />
+      <Toast
+        message={toastMessage}
+        onDone={() => setToastMessage(null)}
       />
     </View>
   );

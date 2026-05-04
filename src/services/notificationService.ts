@@ -171,6 +171,10 @@ export async function scheduleAllTaskReminders(
         ? task.nextDueDate
         : new Date(task.nextDueDate);
 
+    // null = "No Reminder" — opt-out of all push notifications for this task.
+    // The in-app due alert still surfaces it on the due date.
+    if (task.reminderDaysBefore === null) continue;
+
     const daysBefore =
       typeof task.reminderDaysBefore === 'number' ? task.reminderDaysBefore : 1;
 

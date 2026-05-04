@@ -3,6 +3,8 @@ import {
   ActivityIndicator,
   Alert,
   Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -359,7 +361,14 @@ export default function HouseholdSettingsScreen() {
           <Text style={styles.errorText}>{error}</Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.content}>
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+        >
           {/* Household Name */}
           <View style={styles.card}>
             <Text style={styles.sectionLabel}>Household Name</Text>
@@ -520,6 +529,7 @@ export default function HouseholdSettingsScreen() {
             </TouchableOpacity>
           ) : null}
         </ScrollView>
+        </KeyboardAvoidingView>
       )}
 
       {currentUser && householdId ? (
@@ -540,6 +550,9 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: Colors.screenBackground,
+  },
+  flex: {
+    flex: 1,
   },
   safeTop: {
     backgroundColor: Colors.headerBackground,
@@ -580,7 +593,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 16,
     paddingVertical: 16,
-    paddingBottom: 48,
+    paddingBottom: 100,
   },
   card: {
     backgroundColor: Colors.cardBackground,

@@ -115,7 +115,7 @@ export default function AddTaskScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [reminderDaysBefore, setReminderDaysBefore] = useState<number>(
+  const [reminderDaysBefore, setReminderDaysBefore] = useState<number | null>(
     prefill?.reminderDaysBefore ?? 1
   );
 

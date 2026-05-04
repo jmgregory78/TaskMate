@@ -133,7 +133,7 @@ export default function EditTaskScreen() {
   const [showEndByPicker, setShowEndByPicker] = useState(false);
 
   const [assignee, setAssignee] = useState<Assignee | null>(null);
-  const [reminderDaysBefore, setReminderDaysBefore] = useState<number>(1);
+  const [reminderDaysBefore, setReminderDaysBefore] = useState<number | null>(1);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -172,7 +172,11 @@ export default function EditTaskScreen() {
             : null
         );
         setReminderDaysBefore(
-          typeof t.reminderDaysBefore === 'number' ? t.reminderDaysBefore : 1
+          t.reminderDaysBefore === null
+            ? null
+            : typeof t.reminderDaysBefore === 'number'
+              ? t.reminderDaysBefore
+              : 1
         );
         setLoading(false);
       })
@@ -229,7 +233,7 @@ export default function EditTaskScreen() {
     if (!sameDay(nextDueDate, task.nextDueDate)) return true;
     if (!recurrenceEqual(buildRecurrence(), task.recurrence)) return true;
     if ((assignee?.userId ?? null) !== (task.assignedTo ?? null)) return true;
-    if (reminderDaysBefore !== (task.reminderDaysBefore ?? 1)) return true;
+    if (reminderDaysBefore !== task.reminderDaysBefore) return true;
     return false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -289,7 +293,7 @@ export default function EditTaskScreen() {
         changed.nextDueDate = nextDueDate;
         changed.firstDueDate = nextDueDate;
       }
-      if (reminderDaysBefore !== (task.reminderDaysBefore ?? 1)) {
+      if (reminderDaysBefore !== task.reminderDaysBefore) {
         changed.reminderDaysBefore = reminderDaysBefore;
       }
       if (!recurrenceEqual(newRecurrence, task.recurrence)) {
@@ -373,7 +377,7 @@ export default function EditTaskScreen() {
 
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
           <ScrollView
@@ -730,7 +734,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 24,
     paddingTop: 16,
-    paddingBottom: 64,
+    paddingBottom: 100,
   },
   label: {
     fontSize: 14,

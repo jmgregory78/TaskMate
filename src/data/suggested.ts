@@ -9,6 +9,7 @@ export type WizardCategoryId =
   | 'pets'
   | 'inspections'
   | 'finance'
+  | 'travel'
   | 'pool'
   | 'emergency';
 
@@ -27,6 +28,7 @@ export const WIZARD_CATEGORIES: WizardCategory[] = [
   { id: 'pets', emoji: '🐾', name: 'Pet Care' },
   { id: 'inspections', emoji: '🔍', name: 'Inspections & Services' },
   { id: 'finance', emoji: '💰', name: 'Finance & Admin' },
+  { id: 'travel', emoji: '✈️', name: 'Travel & Rewards' },
   { id: 'pool', emoji: '🏊', name: 'Pool & Spa' },
   { id: 'emergency', emoji: '⚡', name: 'Emergency & Seasonal' },
 ];
@@ -168,6 +170,19 @@ export const SUGGESTED_TASKS: SuggestedTaskCategory[] = [
       { id: 'hoa-fees', name: 'Pay HOA Fees', category: 'Other', frequency: 'monthly', interval: 1, reminderDaysBefore: 7 },
       { id: 'passport', name: 'Renew Passport', category: 'Other', frequency: 'yearly', interval: 10, reminderDaysBefore: 90 },
       { id: 'drivers-license', name: "Renew Driver's License", category: 'Other', frequency: 'yearly', interval: 4, reminderDaysBefore: 30 },
+    ],
+  },
+  {
+    id: 'travel',
+    emoji: '✈️',
+    name: 'Travel & Rewards',
+    tasks: [
+      { id: 'free-night-award', name: 'Redeem Free Night Award', category: 'Other', frequency: 'yearly', interval: 1, reminderDaysBefore: 60, icon: '🏨' },
+      { id: 'airline-miles-expiry', name: 'Use Airline Miles Before Expiry', category: 'Other', frequency: 'yearly', interval: 1, reminderDaysBefore: 60, icon: '✈️' },
+      { id: 'cc-annual-fee', name: 'Credit Card Annual Fee Review', category: 'Other', frequency: 'yearly', interval: 1, reminderDaysBefore: 30, icon: '💳' },
+      { id: 'tsa-precheck', name: 'TSA PreCheck Renewal', category: 'Other', frequency: 'yearly', interval: 5, reminderDaysBefore: 60, icon: '🛂' },
+      { id: 'global-entry', name: 'Global Entry Renewal', category: 'Other', frequency: 'yearly', interval: 5, reminderDaysBefore: 60, icon: '🛂' },
+      { id: 'travel-insurance', name: 'Travel Insurance Review', category: 'Other', frequency: 'yearly', interval: 1, reminderDaysBefore: 30, icon: '🛡️' },
     ],
   },
 ];

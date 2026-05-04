@@ -127,7 +127,11 @@ function mapTaskDoc(id: string, data: any): Task {
     assignedAt: toDateOrNull(data.assignedAt),
     assignedBy: data.assignedBy ?? null,
     reminderDaysBefore:
-      typeof data.reminderDaysBefore === 'number' ? data.reminderDaysBefore : 1,
+      data.reminderDaysBefore === null
+        ? null
+        : typeof data.reminderDaysBefore === 'number'
+          ? data.reminderDaysBefore
+          : 1,
     snoozedUntil: toDateOrNull(data.snoozedUntil),
   };
 }
@@ -170,7 +174,11 @@ export async function createTask(
     assignedAt: assignedTo ? serverTimestamp() : null,
     assignedBy: assignedTo ? (creatorUid ?? userId) : null,
     reminderDaysBefore:
-      typeof data.reminderDaysBefore === 'number' ? data.reminderDaysBefore : 1,
+      data.reminderDaysBefore === null
+        ? null
+        : typeof data.reminderDaysBefore === 'number'
+          ? data.reminderDaysBefore
+          : 1,
   });
   await logActivity(householdId, ref.id, 'created', userId);
   return ref.id;

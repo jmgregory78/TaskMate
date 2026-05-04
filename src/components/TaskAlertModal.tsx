@@ -23,6 +23,7 @@ interface Props {
   visible: boolean;
   onComplete: (task: Task) => void;
   onSnooze: (task: Task, amount: number, unit: SnoozeUnit) => void;
+  onSnoozeUntilTomorrow: (task: Task) => void;
   onOpenTask: (task: Task) => void;
   onDismiss: () => void;
 }
@@ -63,6 +64,7 @@ export default function TaskAlertModal({
   visible,
   onComplete,
   onSnooze,
+  onSnoozeUntilTomorrow,
   onOpenTask,
   onDismiss,
 }: Props) {
@@ -140,11 +142,22 @@ export default function TaskAlertModal({
             <View style={[styles.pill, { backgroundColor: urgency.pillBg }]}>
               <Text style={styles.pillText}>{urgency.pillLabel}</Text>
             </View>
-            {showNav ? (
-              <Text style={styles.counter}>
-                {index + 1} of {total}
-              </Text>
-            ) : null}
+            <View style={styles.headerRight}>
+              {showNav ? (
+                <Text style={styles.counter}>
+                  {index + 1} of {total}
+                </Text>
+              ) : null}
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => onSnoozeUntilTomorrow(current)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                activeOpacity={0.6}
+                accessibilityLabel="Snooze until tomorrow"
+              >
+                <Text style={styles.closeIcon}>×</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           <ScrollView
@@ -306,6 +319,23 @@ const styles = StyleSheet.create({
   counter: {
     fontSize: 13,
     color: 'rgba(255,255,255,0.6)',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  closeButton: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeIcon: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 24,
+    fontWeight: '400',
+    lineHeight: 26,
   },
   page: {
     paddingHorizontal: 20,

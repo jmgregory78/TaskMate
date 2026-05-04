@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Modal,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -9,7 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import DateTimePicker, {
   DateTimePickerEvent,
@@ -18,9 +21,14 @@ import { format } from 'date-fns';
 import { useAuth } from '../../hooks/useAuth';
 import { useAppStore } from '../../stores/appStore';
 import { createTask, getTasks } from '../../services/taskService';
-import { createProduct, getProducts } from '../../services/productService';
+import {
+  createProduct,
+  getProducts,
+  updateProduct,
+} from '../../services/productService';
 import { markSetupWizardComplete } from '../../services/householdService';
 import {
+  SUGGESTED_SUPPLIES,
   SuggestedSupply,
   SuggestedTask,
   WIZARD_CATEGORIES,
@@ -29,7 +37,7 @@ import {
   getSuggestedSuppliesFor,
   getSuggestedTasksFor,
 } from '../../data/suggested';
-import { RecurrenceFrequency } from '../../types/models';
+import { Product, RecurrenceFrequency } from '../../types/models';
 import { Colors } from '../../constants/colors';
 
 export type SetupWizardMode = 'firstTime' | 'fromTasks' | 'fromSupplies';
@@ -49,6 +57,24 @@ interface SupplyGroup {
   items: SuggestedSupply[];
 }
 
+interface TaskDraft {
+  firstDue: Date;
+  frequency: RecurrenceFrequency;
+  intervalText: string;
+  reminderDays: number | null;
+}
+
+type SupplyPromptState =
+  | {
+      scenario: 'add';
+      supply: SuggestedSupply;
+    }
+  | {
+      scenario: 'update';
+      supply: SuggestedSupply;
+      product: Product;
+    };
+
 const TOTAL_STEPS = 4;
 
 const FREQUENCY_OPTIONS: { key: RecurrenceFrequency; label: string }[] = [
@@ -58,7 +84,8 @@ const FREQUENCY_OPTIONS: { key: RecurrenceFrequency; label: string }[] = [
   { key: 'yearly', label: 'Yearly' },
 ];
 
-const REMINDER_OPTIONS: { days: number; label: string }[] = [
+const REMINDER_OPTIONS: { days: number | null; label: string }[] = [
+  { days: null, label: 'No Reminder' },
   { days: 1, label: '1 day before' },
   { days: 3, label: '3 days before' },
   { days: 7, label: '1 week before' },
@@ -68,12 +95,38 @@ function normalize(name: string): string {
   return name.trim().toLowerCase();
 }
 
-// Pick the closest reminder option for a suggestion default like 30 days.
-function snapToReminderOption(days: number): number {
-  if (days <= 1) return 1;
-  if (days <= 3) return 3;
-  return 7;
+// Tasks that have an associated supply: when one of these tasks is added in
+// the wizard's per-task queue, the user is prompted to set up / update the
+// matching supply. Keyed by normalized task name → suggested-supply id.
+// Some entries map to tasks that don't exist in SUGGESTED_TASKS yet — those
+// are forward-looking and only fire if a future task name matches.
+const TASK_NAME_TO_SUPPLY_ID: Record<string, string> = {
+  'replace hvac filter': 'hvac-filters',
+  'replace refrigerator filter': 'fridge-water-filter',
+  'replace windshield wipers': 'wipers',
+  'car cabin air filter': 'cabin-filter',
+  'prescription refill': 'prescription',
+  'flea & tick treatment': 'pet-flea-tick',
+  'heartworm prevention': 'pet-heartworm',
+  'service lawnmower': 'small-engine-oil',
+  'test smoke detectors': 'smoke-batteries',
+  'clean dishwasher': 'dishwasher-cleaner',
+  'clean washing machine': 'washer-cleaner',
+  'refill water softener': 'softener-salt',
+  'pool chemical check': 'pool-chlorine',
+  'hot tub maintenance': 'hot-tub-chemicals',
+};
+
+function findAssociatedSupply(taskName: string): SuggestedSupply | null {
+  const supplyId = TASK_NAME_TO_SUPPLY_ID[normalize(taskName)];
+  if (!supplyId) return null;
+  for (const cat of SUGGESTED_SUPPLIES) {
+    const found = cat.supplies.find((s) => s.id === supplyId);
+    if (found) return found;
+  }
+  return null;
 }
+
 
 function parsePositiveInt(value: string, fallback: number): number {
   const n = parseInt(value, 10);
@@ -96,6 +149,7 @@ export default function SetupWizardScreen() {
   const [existingSupplyNames, setExistingSupplyNames] = useState<Set<string>>(
     new Set()
   );
+  const [existingProducts, setExistingProducts] = useState<Product[]>([]);
   // CHANGE 1: all category/task/supply selections start EMPTY (nothing
   // pre-checked). User must opt in.
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<
@@ -113,15 +167,19 @@ export default function SetupWizardScreen() {
 
   // CHANGE 2: per-task configure-queue state
   // configIndex is null when the queue isn't active, otherwise it points to
-  // the current task in `taskQueue`.
+  // the current task in `taskQueue`. Per-task edits live in `drafts` (keyed
+  // by suggested-task id) so navigating Back/forward preserves user input.
   const [configIndex, setConfigIndex] = useState<number | null>(null);
   const [taskQueue, setTaskQueue] = useState<SuggestedTask[]>([]);
-  const [cfgFirstDue, setCfgFirstDue] = useState<Date>(new Date());
-  const [cfgFrequency, setCfgFrequency] =
-    useState<RecurrenceFrequency>('monthly');
-  const [cfgIntervalText, setCfgIntervalText] = useState('1');
-  const [cfgReminderDays, setCfgReminderDays] = useState<number>(1);
+  const [drafts, setDrafts] = useState<Record<string, TaskDraft>>({});
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [supplyPrompt, setSupplyPrompt] = useState<SupplyPromptState | null>(
+    null
+  );
+  // Tracks supply ids we've already prompted for in this wizard session, so a
+  // shared supply (e.g. two tasks both linked to the same filter) only prompts
+  // once.
+  const promptedSupplyIds = useRef<Set<string>>(new Set());
 
   // Load existing data on mount
   useEffect(() => {
@@ -132,6 +190,7 @@ export default function SetupWizardScreen() {
         if (cancelled) return;
         setExistingTaskNames(new Set(tasks.map((t) => normalize(t.name))));
         setExistingSupplyNames(new Set(products.map((p) => normalize(p.name))));
+        setExistingProducts(products);
         setLoaded(true);
       })
       .catch((e) => {
@@ -235,6 +294,14 @@ export default function SetupWizardScreen() {
     else setStep(4);
   };
 
+  const updateDraft = (taskId: string, patch: Partial<TaskDraft>) => {
+    setDrafts((prev) => {
+      const existing = prev[taskId];
+      if (!existing) return prev;
+      return { ...prev, [taskId]: { ...existing, ...patch } };
+    });
+  };
+
   // CHANGE 2: kick off the per-task configuration queue.
   const startConfigureQueue = () => {
     if (checkedTasks.length === 0) {
@@ -242,20 +309,29 @@ export default function SetupWizardScreen() {
       return;
     }
     setSubmitError(null);
+    // Ensure each task has a draft. Existing drafts (from a prior visit
+    // through the queue) are preserved.
+    setDrafts((prev) => {
+      const next = { ...prev };
+      for (const t of checkedTasks) {
+        if (!next[t.id]) {
+          next[t.id] = {
+            firstDue: new Date(),
+            frequency: t.frequency,
+            intervalText: String(t.interval),
+            reminderDays: null,
+          };
+        }
+      }
+      return next;
+    });
     setTaskQueue(checkedTasks);
     setConfigIndex(0);
-    primeConfigForTask(checkedTasks[0]);
-  };
-
-  const primeConfigForTask = (task: SuggestedTask) => {
-    setCfgFirstDue(new Date());
-    setCfgFrequency(task.frequency);
-    setCfgIntervalText(String(task.interval));
-    setCfgReminderDays(snapToReminderOption(task.reminderDaysBefore));
     setShowDatePicker(false);
   };
 
   const advanceConfigQueue = (nextIndex: number) => {
+    setShowDatePicker(false);
     if (nextIndex >= taskQueue.length) {
       // Queue done — exit config mode and continue to supplies
       setConfigIndex(null);
@@ -263,7 +339,6 @@ export default function SetupWizardScreen() {
       advanceFrom2();
     } else {
       setConfigIndex(nextIndex);
-      primeConfigForTask(taskQueue[nextIndex]);
     }
   };
 
@@ -271,6 +346,8 @@ export default function SetupWizardScreen() {
     if (configIndex === null) return;
     if (!user || !householdId) return;
     const task = taskQueue[configIndex];
+    const draft = drafts[task.id];
+    if (!draft) return;
     setSubmitting(true);
     setSubmitError(null);
     const userLabel = user.displayName ?? user.email ?? user.uid;
@@ -283,19 +360,35 @@ export default function SetupWizardScreen() {
           name: task.name,
           category: task.category,
           description: undefined,
-          firstDueDate: cfgFirstDue,
+          firstDueDate: draft.firstDue,
           recurrence: {
-            frequency: cfgFrequency,
-            interval: parsePositiveInt(cfgIntervalText, 1),
+            frequency: draft.frequency,
+            interval: parsePositiveInt(draft.intervalText, 1),
           },
           hasInventory: false,
           instructions: null,
-          reminderDaysBefore: cfgReminderDays,
+          reminderDaysBefore: draft.reminderDays,
         },
         user.uid
       );
       setAddedTaskCount((c) => c + 1);
       setSubmitting(false);
+
+      // CHANGE 2: prompt for associated supply (if any) before advancing.
+      const supply = findAssociatedSupply(task.name);
+      if (supply && !promptedSupplyIds.current.has(supply.id)) {
+        promptedSupplyIds.current.add(supply.id);
+        const existing = existingProducts.find(
+          (p) => normalize(p.name) === normalize(supply.name)
+        );
+        if (existing) {
+          setSupplyPrompt({ scenario: 'update', supply, product: existing });
+        } else {
+          setSupplyPrompt({ scenario: 'add', supply });
+        }
+        return; // queue advance happens after the prompt resolves
+      }
+
       advanceConfigQueue(configIndex + 1);
     } catch (e) {
       const err = e as { message?: string };
@@ -304,10 +397,103 @@ export default function SetupWizardScreen() {
     }
   };
 
+  // ----- Supply prompt handlers (CHANGE 2) -----
+  const closeSupplyPromptAndAdvance = () => {
+    const next = configIndex !== null ? configIndex + 1 : 0;
+    setSupplyPrompt(null);
+    if (configIndex !== null) advanceConfigQueue(next);
+  };
+
+  const handleSupplyPromptAdd = async (qty: number) => {
+    if (supplyPrompt?.scenario !== 'add') return;
+    if (!user || !householdId) return;
+    const userLabel = user.displayName ?? user.email ?? user.uid;
+    const supply = supplyPrompt.supply;
+    try {
+      const newId = await createProduct(householdId, userLabel, {
+        householdId,
+        name: supply.name,
+        amazonUrl: '',
+        containerSize: supply.defaultQty,
+        containerUnit: supply.unit,
+        currentQuantity: qty,
+        lowThresholdPercent: 25,
+      });
+      // Reflect the new product locally so a subsequent prompt for the same
+      // supply (shouldn't happen due to promptedSupplyIds, but defensive)
+      // would see scenario 'update', and the supplies-step filtering hides it.
+      setExistingSupplyNames((prev) => {
+        const next = new Set(prev);
+        next.add(normalize(supply.name));
+        return next;
+      });
+      setExistingProducts((prev) => [
+        ...prev,
+        {
+          id: newId,
+          householdId,
+          name: supply.name,
+          amazonUrl: '',
+          containerSize: supply.defaultQty,
+          containerUnit: supply.unit,
+          currentQuantity: qty,
+          lowThresholdPercent: 25,
+          lastPurchasedAt: null,
+          lastPurchasePrice: null,
+          purchasePending: false,
+          purchasePendingAt: null,
+          createdAt: new Date(),
+          createdBy: userLabel,
+        },
+      ]);
+      setAddedSupplyCount((c) => c + 1);
+    } catch (e) {
+      console.warn('[SetupWizard] supply prompt add failed:', e);
+    }
+    closeSupplyPromptAndAdvance();
+  };
+
+  const handleSupplyPromptUpdate = async (qty: number) => {
+    if (supplyPrompt?.scenario !== 'update') return;
+    if (!householdId) return;
+    const product = supplyPrompt.product;
+    try {
+      await updateProduct(householdId, product.id, { currentQuantity: qty });
+      setExistingProducts((prev) =>
+        prev.map((p) =>
+          p.id === product.id ? { ...p, currentQuantity: qty } : p
+        )
+      );
+    } catch (e) {
+      console.warn('[SetupWizard] supply prompt update failed:', e);
+    }
+    closeSupplyPromptAndAdvance();
+  };
+
+  const handleSupplyPromptDismiss = () => {
+    closeSupplyPromptAndAdvance();
+  };
+
   const handleConfigureSkip = () => {
     if (configIndex === null) return;
     setSubmitError(null);
     advanceConfigQueue(configIndex + 1);
+  };
+
+  const handleConfigureBack = () => {
+    if (configIndex === null) return;
+    setSubmitError(null);
+    setShowDatePicker(false);
+    if (configIndex === 0) {
+      // First task → return to the suggested-tasks checklist (Step 2).
+      // Drafts are intentionally NOT cleared so re-entering the queue
+      // restores the user's edits.
+      setConfigIndex(null);
+      setTaskQueue([]);
+      setStep(2);
+    } else {
+      setConfigIndex(configIndex - 1);
+    }
   };
 
   const handleAddSupplies = async () => {
@@ -409,8 +595,9 @@ export default function SetupWizardScreen() {
     selected: Date | undefined
   ) => {
     if (Platform.OS === 'android') setShowDatePicker(false);
-    if (event.type === 'set' && selected) {
-      setCfgFirstDue(selected);
+    if (event.type === 'set' && selected && configIndex !== null) {
+      const taskId = taskQueue[configIndex]?.id;
+      if (taskId) updateDraft(taskId, { firstDue: selected });
     }
   };
 
@@ -418,6 +605,7 @@ export default function SetupWizardScreen() {
   const inConfigQueue = configIndex !== null;
   const showCloseButton =
     mode !== 'firstTime' && step !== 4 && !inConfigQueue;
+  const showBackButton = inConfigQueue;
 
   if (!loaded) {
     return (
@@ -454,6 +642,8 @@ export default function SetupWizardScreen() {
         <SafeAreaView edges={['top']} style={styles.safeTop} />
         <View style={styles.container}>
           <Header
+            showBack={false}
+            onBack={handleConfigureBack}
             showClose={showCloseButton}
             onClose={handleClose}
             step={null}
@@ -483,27 +673,31 @@ export default function SetupWizardScreen() {
   return (
     <View style={styles.flex}>
       <SafeAreaView edges={['top']} style={styles.safeTop} />
-      <View style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
         <Header
+          showBack={showBackButton}
+          onBack={handleConfigureBack}
           showClose={showCloseButton}
           onClose={handleClose}
           step={step}
         />
-        {inConfigQueue && configIndex !== null ? (
+        {inConfigQueue &&
+        configIndex !== null &&
+        drafts[taskQueue[configIndex]?.id] ? (
           <ConfigureTaskStep
             task={taskQueue[configIndex]}
             index={configIndex}
             total={taskQueue.length}
-            firstDue={cfgFirstDue}
-            frequency={cfgFrequency}
-            intervalText={cfgIntervalText}
-            reminderDays={cfgReminderDays}
+            draft={drafts[taskQueue[configIndex].id]}
+            onUpdateDraft={(patch) =>
+              updateDraft(taskQueue[configIndex].id, patch)
+            }
             showDatePicker={showDatePicker}
             onPressDate={() => setShowDatePicker(true)}
             onChangeDate={onChangeFirstDue}
-            onChangeFrequency={setCfgFrequency}
-            onChangeInterval={setCfgIntervalText}
-            onChangeReminder={setCfgReminderDays}
             onSave={handleConfigureSave}
             onSkip={handleConfigureSkip}
             submitting={submitting}
@@ -544,7 +738,13 @@ export default function SetupWizardScreen() {
             onDone={handleDone}
           />
         ) : null}
-      </View>
+      </KeyboardAvoidingView>
+      <SupplySheet
+        prompt={supplyPrompt}
+        onAdd={handleSupplyPromptAdd}
+        onUpdate={handleSupplyPromptUpdate}
+        onDismiss={handleSupplyPromptDismiss}
+      />
     </View>
   );
 }
@@ -552,15 +752,32 @@ export default function SetupWizardScreen() {
 // ----- Header -----
 function Header({
   step,
+  showBack,
+  onBack,
   showClose,
   onClose,
 }: {
   step: 1 | 2 | 3 | 4 | null;
+  showBack: boolean;
+  onBack: () => void;
   showClose: boolean;
   onClose: () => void;
 }) {
   return (
     <View style={styles.header}>
+      <View style={styles.headerSlot}>
+        {showBack ? (
+          <TouchableOpacity
+            onPress={onBack}
+            style={styles.headerButton}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            activeOpacity={0.7}
+            accessibilityLabel="Back"
+          >
+            <Text style={styles.backIcon}>‹</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
       <View style={styles.progressRow}>
         {step !== null
           ? Array.from({ length: TOTAL_STEPS }).map((_, i) => {
@@ -580,18 +797,19 @@ function Header({
             })
           : null}
       </View>
-      {showClose ? (
-        <TouchableOpacity
-          onPress={onClose}
-          style={styles.closeButton}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.closeText}>✕</Text>
-        </TouchableOpacity>
-      ) : (
-        <View style={styles.closeButton} />
-      )}
+      <View style={[styles.headerSlot, styles.headerSlotRight]}>
+        {showClose ? (
+          <TouchableOpacity
+            onPress={onClose}
+            style={styles.headerButton}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            activeOpacity={0.7}
+            accessibilityLabel="Close"
+          >
+            <Text style={styles.closeText}>✕</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -620,6 +838,7 @@ function Step1({
       <ScrollView
         style={styles.flex}
         contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
       >
         {categories.map((cat) => {
           const selected = selectedIds.has(cat.id);
@@ -699,6 +918,7 @@ function Step2({
       <ScrollView
         style={styles.flex}
         contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
       >
         {groups.map((g) => (
           <View key={g.category.id} style={styles.groupBlock}>
@@ -751,16 +971,11 @@ function ConfigureTaskStep({
   task,
   index,
   total,
-  firstDue,
-  frequency,
-  intervalText,
-  reminderDays,
+  draft,
+  onUpdateDraft,
   showDatePicker,
   onPressDate,
   onChangeDate,
-  onChangeFrequency,
-  onChangeInterval,
-  onChangeReminder,
   onSave,
   onSkip,
   submitting,
@@ -769,16 +984,11 @@ function ConfigureTaskStep({
   task: SuggestedTask;
   index: number;
   total: number;
-  firstDue: Date;
-  frequency: RecurrenceFrequency;
-  intervalText: string;
-  reminderDays: number;
+  draft: TaskDraft;
+  onUpdateDraft: (patch: Partial<TaskDraft>) => void;
   showDatePicker: boolean;
   onPressDate: () => void;
   onChangeDate: (e: DateTimePickerEvent, d: Date | undefined) => void;
-  onChangeFrequency: (f: RecurrenceFrequency) => void;
-  onChangeInterval: (v: string) => void;
-  onChangeReminder: (days: number) => void;
   onSave: () => void;
   onSkip: () => void;
   submitting: boolean;
@@ -792,11 +1002,13 @@ function ConfigureTaskStep({
             Task {index + 1} of {total}
           </Text>
         ) : null}
-        <View style={styles.taskHeading}>
+        <View style={styles.nameCard}>
           {task.icon ? (
             <Text style={styles.taskHeadingIcon}>{task.icon}</Text>
           ) : null}
-          <Text style={styles.title}>{task.name}</Text>
+          <Text style={[styles.title, styles.nameText]} numberOfLines={2}>
+            {task.name}
+          </Text>
         </View>
       </View>
       <ScrollView
@@ -812,13 +1024,13 @@ function ConfigureTaskStep({
           disabled={submitting}
         >
           <Text style={styles.dateText}>
-            {format(firstDue, 'EEE, MMM d, yyyy')}
+            {format(draft.firstDue, 'EEE, MMM d, yyyy')}
           </Text>
           <Text style={styles.chevron}>›</Text>
         </TouchableOpacity>
         {showDatePicker ? (
           <DateTimePicker
-            value={firstDue}
+            value={draft.firstDue}
             mode="date"
             display={Platform.OS === 'ios' ? 'inline' : 'default'}
             onChange={onChangeDate}
@@ -828,12 +1040,12 @@ function ConfigureTaskStep({
         <Text style={styles.fieldLabel}>How often does it repeat?</Text>
         <View style={styles.frequencyRow}>
           {FREQUENCY_OPTIONS.map((opt) => {
-            const active = opt.key === frequency;
+            const active = opt.key === draft.frequency;
             return (
               <TouchableOpacity
                 key={opt.key}
                 style={[styles.freqChip, active && styles.freqChipOn]}
-                onPress={() => onChangeFrequency(opt.key)}
+                onPress={() => onUpdateDraft({ frequency: opt.key })}
                 activeOpacity={0.7}
                 disabled={submitting}
               >
@@ -853,26 +1065,27 @@ function ConfigureTaskStep({
           <Text style={styles.intervalEvery}>Every</Text>
           <TextInput
             style={styles.intervalInput}
-            value={intervalText}
-            onChangeText={onChangeInterval}
+            value={draft.intervalText}
+            onChangeText={(intervalText) => onUpdateDraft({ intervalText })}
             keyboardType="number-pad"
             editable={!submitting}
             selectTextOnFocus
           />
           <Text style={styles.intervalUnit}>
-            {unitWord(frequency, parsePositiveInt(intervalText, 1))}
+            {unitWord(draft.frequency, parsePositiveInt(draft.intervalText, 1))}
           </Text>
         </View>
 
         <Text style={styles.fieldLabel}>Remind me</Text>
         <View style={styles.reminderColumn}>
           {REMINDER_OPTIONS.map((opt) => {
-            const active = opt.days === reminderDays;
+            const active = opt.days === draft.reminderDays;
+            const key = opt.days === null ? 'none' : String(opt.days);
             return (
               <TouchableOpacity
-                key={opt.days}
+                key={key}
                 style={[styles.reminderRow, active && styles.reminderRowOn]}
-                onPress={() => onChangeReminder(opt.days)}
+                onPress={() => onUpdateDraft({ reminderDays: opt.days })}
                 activeOpacity={0.7}
                 disabled={submitting}
               >
@@ -974,6 +1187,7 @@ function Step3({
       <ScrollView
         style={styles.flex}
         contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
       >
         {groups.map((g) => (
           <View key={g.category.id} style={styles.groupBlock}>
@@ -1031,6 +1245,227 @@ function Step3({
     </>
   );
 }
+
+// ----- SupplySheet (CHANGE 2 — prompt after a task is saved) -----
+function SupplySheet({
+  prompt,
+  onAdd,
+  onUpdate,
+  onDismiss,
+}: {
+  prompt: SupplyPromptState | null;
+  onAdd: (qty: number) => void;
+  onUpdate: (qty: number) => void;
+  onDismiss: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  // Local qty state, seeded from the prompt's default whenever a new prompt
+  // becomes visible. We key the input by supply id + scenario so it resets
+  // cleanly between prompts within one wizard session.
+  const seedQty = (() => {
+    if (!prompt) return '0';
+    return prompt.scenario === 'add'
+      ? String(prompt.supply.defaultQty)
+      : String(prompt.product.currentQuantity);
+  })();
+  const [qtyText, setQtyText] = useState(seedQty);
+  const seedKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!prompt) {
+      seedKeyRef.current = null;
+      return;
+    }
+    const key = `${prompt.scenario}:${prompt.supply.id}`;
+    if (seedKeyRef.current !== key) {
+      seedKeyRef.current = key;
+      setQtyText(seedQty);
+    }
+  }, [prompt, seedQty]);
+
+  if (!prompt) return null;
+
+  const supply = prompt.supply;
+  const parsedQty = parseInt(qtyText, 10);
+  const safeQty = Number.isFinite(parsedQty) && parsedQty >= 0 ? parsedQty : 0;
+  const inc = () => setQtyText(String(safeQty + 1));
+  const dec = () => setQtyText(String(Math.max(0, safeQty - 1)));
+
+  const isAdd = prompt.scenario === 'add';
+  const title = isAdd
+    ? `Set up your ${supply.name}?`
+    : `You have ${supply.name} in your supplies`;
+  const body = isAdd
+    ? "Track how many you have so TaskMate can remind you when you're running low."
+    : `You currently have ${prompt.product.currentQuantity} ${supply.unit}. Would you like to update the quantity?`;
+  const primaryLabel = isAdd ? 'Add to Supplies' : 'Update Quantity';
+  const secondaryLabel = isAdd ? 'Skip for Now' : 'Looks Good';
+
+  const handlePrimary = () => {
+    if (isAdd) onAdd(safeQty);
+    else onUpdate(safeQty);
+  };
+
+  return (
+    <Modal
+      visible
+      transparent
+      animationType="slide"
+      onRequestClose={onDismiss}
+    >
+      <Pressable style={sheetStyles.overlay} onPress={onDismiss}>
+        <Pressable
+          style={[sheetStyles.sheet, { paddingBottom: insets.bottom + 16 }]}
+          onPress={() => {}}
+        >
+          <View style={sheetStyles.handle} />
+          <Text style={sheetStyles.title}>{title}</Text>
+          <Text style={sheetStyles.body}>{body}</Text>
+
+          <View style={sheetStyles.qtyRow}>
+            <TouchableOpacity
+              onPress={dec}
+              style={sheetStyles.stepperButton}
+              activeOpacity={0.7}
+              accessibilityLabel="Decrease quantity"
+            >
+              <Text style={sheetStyles.stepperButtonText}>−</Text>
+            </TouchableOpacity>
+            <TextInput
+              style={sheetStyles.qtyInput}
+              value={qtyText}
+              onChangeText={(v) => setQtyText(v.replace(/[^0-9]/g, ''))}
+              keyboardType="number-pad"
+              selectTextOnFocus
+            />
+            <TouchableOpacity
+              onPress={inc}
+              style={sheetStyles.stepperButton}
+              activeOpacity={0.7}
+              accessibilityLabel="Increase quantity"
+            >
+              <Text style={sheetStyles.stepperButtonText}>+</Text>
+            </TouchableOpacity>
+            <Text style={sheetStyles.unit}>{supply.unit}</Text>
+          </View>
+
+          <TouchableOpacity
+            style={sheetStyles.primaryButton}
+            onPress={handlePrimary}
+            activeOpacity={0.85}
+          >
+            <Text style={sheetStyles.primaryText}>{primaryLabel}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={sheetStyles.secondaryButton}
+            onPress={onDismiss}
+            activeOpacity={0.85}
+          >
+            <Text style={sheetStyles.secondaryText}>{secondaryLabel}</Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+const sheetStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: Colors.cardBackground,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+  },
+  handle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.border,
+    marginBottom: 12,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  body: {
+    fontSize: 14,
+    color: Colors.textMuted,
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  qtyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginBottom: 20,
+  },
+  stepperButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.cardBackground,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperButtonText: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+    lineHeight: 26,
+  },
+  qtyInput: {
+    minWidth: 64,
+    height: 44,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 8,
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+    backgroundColor: Colors.screenBackground,
+    textAlign: 'center',
+  },
+  unit: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+  },
+  primaryButton: {
+    backgroundColor: Colors.primary,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  primaryText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  secondaryButton: {
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  secondaryText: {
+    color: Colors.textMuted,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+});
 
 // ----- Step 4 -----
 function Step4({
@@ -1102,11 +1537,32 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
   },
-  progressRow: {
+  headerSlot: {
+    width: 48,
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  headerSlotRight: {
+    justifyContent: 'flex-end',
+  },
+  headerButton: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backIcon: {
+    color: '#FFFFFF',
+    fontSize: 30,
+    fontWeight: '600',
+    lineHeight: 32,
+  },
+  progressRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
   },
   progressDot: {
@@ -1121,12 +1577,6 @@ const styles = StyleSheet.create({
   },
   progressDotDone: {
     backgroundColor: Colors.primary,
-  },
-  closeButton: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   closeText: {
     color: '#FFFFFF',
@@ -1162,7 +1612,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 16,
     paddingTop: 8,
-    paddingBottom: 24,
+    paddingBottom: 100,
   },
   categoryCard: {
     flexDirection: 'row',
@@ -1301,13 +1751,26 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginBottom: 8,
   },
-  taskHeading: {
+  taskHeadingIcon: {
+    fontSize: 32,
+  },
+  nameCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  taskHeadingIcon: {
-    fontSize: 32,
+  nameText: {
+    flex: 1,
+    marginBottom: 0,
   },
   fieldLabel: {
     fontSize: 14,

@@ -672,7 +672,7 @@ function ChangeDisplayNameModal({ visible, onClose }: DisplayNameProps) {
     >
       <KeyboardAvoidingView
         style={styles.centeredOverlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Change Display Name</Text>
@@ -798,7 +798,7 @@ function ChangePasswordModal({ visible, onClose }: PasswordProps) {
     >
       <KeyboardAvoidingView
         style={styles.centeredOverlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Change Password</Text>
