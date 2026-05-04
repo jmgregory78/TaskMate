@@ -187,7 +187,7 @@ export default function TimelineScreen() {
 
   const openSuggested = () => {
     setSheetOpen(false);
-    navigation.navigate('SuggestedTasks');
+    navigation.navigate('SetupWizard', { mode: 'fromTasks' });
   };
   const openCustom = () => {
     setSheetOpen(false);

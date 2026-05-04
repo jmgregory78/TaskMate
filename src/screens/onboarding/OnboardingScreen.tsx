@@ -154,7 +154,7 @@ export default function OnboardingScreen({
                   {
                     gap: 28,
                     items: [
-                      ['🌿', 'Mulch Garden'],
+                      ['💊', 'Prescription Medication'],
                       ['🛂', 'Renew Passport'],
                     ],
                   },
@@ -282,13 +282,29 @@ export default function OnboardingScreen({
             <Text style={styles.bigEmoji}>📦</Text>
             <Text style={styles.pageTitle}>Never run out</Text>
             <Text style={styles.pageSubtext}>
-              Link supplies to your tasks and track what you have on hand.
-              TaskMate calculates how many uses you have left and warns you
-              before you run out.
+              Track the supplies that keep your household running — like your
+              prescription medication. TaskMate calculates how many uses you
+              have left and warns you before you run out.
             </Text>
+
+            <View style={styles.exampleCard}>
+              <Text style={styles.exampleIcon}>💊</Text>
+              <View style={styles.exampleBody}>
+                <Text style={styles.exampleName}>Prescription Medication</Text>
+                <View style={styles.exampleBar}>
+                  <View
+                    style={[styles.exampleBarFill, { width: '75%' }]}
+                  />
+                </View>
+                <Text style={styles.exampleMeta}>
+                  45 of 60 doses remaining
+                </Text>
+              </View>
+            </View>
+
             <View style={styles.bulletList}>
               {[
-                'Track quantities like filters, oil, or chemicals',
+                'Track medication, filters, oil, and other essentials',
                 'See exactly how many uses remain',
                 "Get low stock alerts before it's too late",
                 'One tap to reorder from where you buy',
@@ -421,6 +437,43 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
     marginBottom: 24,
+  },
+  exampleCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 24,
+    gap: 12,
+  },
+  exampleIcon: {
+    fontSize: 36,
+  },
+  exampleBody: {
+    flex: 1,
+  },
+  exampleName: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  exampleBar: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    overflow: 'hidden',
+    marginBottom: 6,
+  },
+  exampleBarFill: {
+    height: '100%',
+    backgroundColor: Colors.primary,
+    borderRadius: 3,
+  },
+  exampleMeta: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.7)',
   },
   bulletList: {
     gap: 12,

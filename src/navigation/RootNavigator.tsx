@@ -18,6 +18,7 @@ import { useAppStore } from '../stores/appStore';
 import {
   getUserHousehold,
   hasCompletedOnboarding,
+  hasCompletedSetupWizard,
   markOnboardingComplete,
 } from '../services/householdService';
 import { getFirstName } from '../utils/nameUtils';
@@ -43,6 +44,10 @@ import ProductDetailScreen from '../screens/supplies/ProductDetailScreen';
 import SuppliesScreen from '../screens/supplies/SuppliesScreen';
 import CreateProductScreen from '../screens/supplies/CreateProductScreen';
 import EditProductScreen from '../screens/supplies/EditProductScreen';
+import SuggestedSuppliesScreen from '../screens/supplies/SuggestedSuppliesScreen';
+import SetupWizardScreen, {
+  SetupWizardMode,
+} from '../screens/setup/SetupWizardScreen';
 import HouseholdSettingsScreen from '../screens/household/HouseholdSettingsScreen';
 import AppTutorialScreen from '../screens/appguide/AppTutorialScreen';
 import FeedbackScreen from '../screens/appguide/FeedbackScreen';
@@ -94,6 +99,8 @@ export type AppStackParamList = {
   ProductDetail: { householdId: string; productId: string };
   CreateProduct: undefined;
   EditProduct: { product: Product };
+  SuggestedSupplies: undefined;
+  SetupWizard: { mode: SetupWizardMode };
   HouseholdSettings: undefined;
   AppTutorial: undefined;
   Feedback: undefined;
@@ -265,10 +272,12 @@ export default function RootNavigator() {
   const setShowOnboarding = useAppStore((s) => s.setShowOnboarding);
   const [checkedForUid, setCheckedForUid] = useState<string | null>(null);
   const [onboardingChecked, setOnboardingChecked] = useState(false);
+  const [setupWizardChecked, setSetupWizardChecked] = useState(false);
 
   useEffect(() => {
     if (!user?.uid || !currentHouseholdId) {
       setOnboardingChecked(false);
+      setSetupWizardChecked(false);
       return;
     }
     if (onboardingChecked) return;
@@ -292,6 +301,43 @@ export default function RootNavigator() {
     currentHouseholdId,
     onboardingChecked,
     setShowOnboarding,
+  ]);
+
+  // Launch the setup wizard once after onboarding completes (or on app start
+  // if a previous attempt was interrupted before setupWizardComplete was set).
+  useEffect(() => {
+    if (!user?.uid || !currentHouseholdId) return;
+    if (showOnboarding) return; // Wait until onboarding modal is gone
+    if (!onboardingChecked) return; // Wait until we know onboarding state
+    if (setupWizardChecked) return;
+    let cancelled = false;
+    hasCompletedSetupWizard(user.uid)
+      .then((done) => {
+        if (cancelled) return;
+        if (!done) {
+          // Slight defer so the navigator has settled before pushing.
+          setTimeout(() => {
+            navigationRef.current?.navigate('SetupWizard', {
+              mode: 'firstTime',
+            });
+          }, 0);
+        }
+      })
+      .catch((e) => {
+        console.warn('[RootNavigator] setup wizard check failed:', e);
+      })
+      .finally(() => {
+        if (!cancelled) setSetupWizardChecked(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    user?.uid,
+    currentHouseholdId,
+    showOnboarding,
+    onboardingChecked,
+    setupWizardChecked,
   ]);
 
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
@@ -476,6 +522,15 @@ export default function RootNavigator() {
           <AppStack.Screen
             name="EditProduct"
             component={EditProductScreen}
+          />
+          <AppStack.Screen
+            name="SuggestedSupplies"
+            component={SuggestedSuppliesScreen}
+          />
+          <AppStack.Screen
+            name="SetupWizard"
+            component={SetupWizardScreen}
+            options={{ gestureEnabled: false }}
           />
           <AppStack.Screen
             name="HouseholdSettings"

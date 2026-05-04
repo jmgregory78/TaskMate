@@ -14,91 +14,10 @@ import {
 } from '@react-navigation/native';
 import { useAppStore } from '../../stores/appStore';
 import { getTasks } from '../../services/taskService';
-import {
-  RecurrenceFrequency,
-  TaskCategory,
-} from '../../types/models';
+import { RecurrenceFrequency } from '../../types/models';
+import { SUGGESTED_TASKS, SuggestedTask } from '../../data/suggested';
 import ScreenHeader from '../../components/ScreenHeader';
 import { Colors } from '../../constants/colors';
-
-interface SuggestedTask {
-  id: string;
-  name: string;
-  category: TaskCategory;
-  frequency: RecurrenceFrequency;
-  interval: number;
-  reminderDaysBefore: number;
-}
-
-interface SuggestedCategory {
-  id: string;
-  emoji: string;
-  name: string;
-  tasks: SuggestedTask[];
-}
-
-const SUGGESTED: SuggestedCategory[] = [
-  {
-    id: 'vehicles',
-    emoji: '🚗',
-    name: 'Vehicles',
-    tasks: [
-      { id: 'oil-change', name: 'Oil Change', category: 'Vehicles', frequency: 'monthly', interval: 3, reminderDaysBefore: 7 },
-      { id: 'rotate-tires', name: 'Rotate Tires', category: 'Vehicles', frequency: 'monthly', interval: 6, reminderDaysBefore: 7 },
-      { id: 'tire-pressure', name: 'Check Tire Pressure', category: 'Vehicles', frequency: 'monthly', interval: 1, reminderDaysBefore: 1 },
-      { id: 'wipers', name: 'Replace Windshield Wipers', category: 'Vehicles', frequency: 'yearly', interval: 1, reminderDaysBefore: 7 },
-      { id: 'car-wash', name: 'Car Wash & Detail', category: 'Vehicles', frequency: 'monthly', interval: 1, reminderDaysBefore: 1 },
-      { id: 'car-registration', name: 'Car Registration Renewal', category: 'Vehicles', frequency: 'yearly', interval: 1, reminderDaysBefore: 30 },
-    ],
-  },
-  {
-    id: 'home-systems',
-    emoji: '🏠',
-    name: 'Home Systems',
-    tasks: [
-      { id: 'hvac-filter', name: 'Replace HVAC Filter', category: 'Equipment', frequency: 'monthly', interval: 3, reminderDaysBefore: 3 },
-      { id: 'hvac-service', name: 'Service HVAC Equipment', category: 'Equipment', frequency: 'yearly', interval: 1, reminderDaysBefore: 14 },
-      { id: 'smoke-detectors', name: 'Test Smoke Detectors', category: 'Equipment', frequency: 'monthly', interval: 6, reminderDaysBefore: 3 },
-      { id: 'water-heater', name: 'Flush Water Heater', category: 'Equipment', frequency: 'yearly', interval: 1, reminderDaysBefore: 7 },
-      { id: 'gutters', name: 'Clean Gutters', category: 'Outdoor', frequency: 'monthly', interval: 6, reminderDaysBefore: 7 },
-      { id: 'roof-inspect', name: 'Inspect Roof', category: 'Outdoor', frequency: 'yearly', interval: 1, reminderDaysBefore: 14 },
-    ],
-  },
-  {
-    id: 'outdoor',
-    emoji: '🌿',
-    name: 'Outdoor',
-    tasks: [
-      { id: 'lawnmower', name: 'Service Lawnmower', category: 'Equipment', frequency: 'yearly', interval: 1, reminderDaysBefore: 14 },
-      { id: 'sprinkler', name: 'Inspect Sprinkler System', category: 'Outdoor', frequency: 'yearly', interval: 1, reminderDaysBefore: 14 },
-      { id: 'mulch', name: 'Mulch Garden', category: 'Outdoor', frequency: 'yearly', interval: 1, reminderDaysBefore: 14 },
-      { id: 'window-cleaning', name: 'Window Cleaning', category: 'Outdoor', frequency: 'monthly', interval: 6, reminderDaysBefore: 3 },
-    ],
-  },
-  {
-    id: 'bath-kitchen',
-    emoji: '🛁',
-    name: 'Bathroom & Kitchen',
-    tasks: [
-      { id: 'seal-grout', name: 'Seal Grout', category: 'Bathroom', frequency: 'yearly', interval: 1, reminderDaysBefore: 14 },
-      { id: 'fridge-filter', name: 'Replace Refrigerator Filter', category: 'Kitchen', frequency: 'monthly', interval: 6, reminderDaysBefore: 3 },
-      { id: 'dishwasher', name: 'Clean Dishwasher', category: 'Kitchen', frequency: 'monthly', interval: 1, reminderDaysBefore: 1 },
-    ],
-  },
-  {
-    id: 'finance',
-    emoji: '💰',
-    name: 'Finance & Admin',
-    tasks: [
-      { id: 'property-taxes', name: 'Pay Property Taxes', category: 'Other', frequency: 'monthly', interval: 6, reminderDaysBefore: 14 },
-      { id: 'tax-return', name: 'File Tax Return', category: 'Other', frequency: 'yearly', interval: 1, reminderDaysBefore: 30 },
-      { id: 'home-insurance', name: 'Review Home Insurance', category: 'Other', frequency: 'yearly', interval: 1, reminderDaysBefore: 30 },
-      { id: 'hoa-fees', name: 'Pay HOA Fees', category: 'Other', frequency: 'monthly', interval: 1, reminderDaysBefore: 7 },
-      { id: 'passport', name: 'Renew Passport', category: 'Other', frequency: 'yearly', interval: 10, reminderDaysBefore: 90 },
-      { id: 'drivers-license', name: "Renew Driver's License", category: 'Other', frequency: 'yearly', interval: 4, reminderDaysBefore: 30 },
-    ],
-  },
-];
 
 function recurrenceLabel(frequency: RecurrenceFrequency, interval: number): string {
   const unit =
@@ -160,7 +79,7 @@ export default function SuggestedTasksScreen() {
     <View style={styles.container}>
       <ScreenHeader title="Suggested Tasks" leftLabel="Back" />
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {SUGGESTED.map((cat) => (
+        {SUGGESTED_TASKS.map((cat) => (
           <View key={cat.id} style={styles.categoryBlock}>
             <Text style={styles.categoryTitle}>
               {cat.emoji} {cat.name}
@@ -178,6 +97,9 @@ export default function SuggestedTasksScreen() {
                   onPress={() => handleTap(t)}
                   activeOpacity={0.7}
                 >
+                  {t.icon ? (
+                    <Text style={styles.taskIcon}>{t.icon}</Text>
+                  ) : null}
                   <View style={styles.taskTextWrap}>
                     <View style={styles.taskNameRow}>
                       <Text style={styles.taskName}>{t.name}</Text>
@@ -233,6 +155,10 @@ const styles = StyleSheet.create({
   taskRowHighlighted: {
     borderColor: Colors.primary,
     backgroundColor: Colors.primaryLight,
+  },
+  taskIcon: {
+    fontSize: 22,
+    marginRight: 12,
   },
   taskTextWrap: {
     flex: 1,

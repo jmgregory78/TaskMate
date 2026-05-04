@@ -86,6 +86,22 @@ export async function hasCompletedOnboarding(
   return snap.data().onboardingComplete === true;
 }
 
+export async function markSetupWizardComplete(userId: string): Promise<void> {
+  await setDoc(
+    doc(db, 'users', userId),
+    { setupWizardComplete: true },
+    { merge: true }
+  );
+}
+
+export async function hasCompletedSetupWizard(
+  userId: string
+): Promise<boolean> {
+  const snap = await getDoc(doc(db, 'users', userId));
+  if (!snap.exists()) return false;
+  return snap.data().setupWizardComplete === true;
+}
+
 export async function getUserHousehold(userId: string): Promise<string | null> {
   const snap = await getDoc(doc(db, 'users', userId));
   if (!snap.exists()) return null;

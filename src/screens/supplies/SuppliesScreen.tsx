@@ -32,6 +32,7 @@ import InventoryBar from '../../components/InventoryBar';
 import StockOverviewCard from '../../components/StockOverviewCard';
 import UserAvatar from '../../components/UserAvatar';
 import FAB from '../../components/FAB';
+import SupplyTypeSheet from '../../components/SupplyTypeSheet';
 import { Colors } from '../../constants/colors';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -71,6 +72,16 @@ export default function SuppliesScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'stock' | 'alpha' | 'task'>('stock');
+  const [sheetOpen, setSheetOpen] = useState(false);
+
+  const openSuggested = () => {
+    setSheetOpen(false);
+    navigation.navigate('SetupWizard', { mode: 'fromSupplies' });
+  };
+  const openCustom = () => {
+    setSheetOpen(false);
+    navigation.navigate('CreateProduct');
+  };
 
   const fabScale = useRef(new Animated.Value(1)).current;
   const lastScrollY = useRef(0);
@@ -379,8 +390,14 @@ export default function SuppliesScreen() {
       <Header />
       {body}
       <FAB
-        onPress={() => navigation.navigate('CreateProduct')}
+        onPress={() => setSheetOpen(true)}
         scrollScale={fabScale}
+      />
+      <SupplyTypeSheet
+        visible={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        onSuggested={openSuggested}
+        onCustom={openCustom}
       />
     </View>
   );

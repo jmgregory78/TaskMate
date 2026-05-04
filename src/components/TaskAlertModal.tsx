@@ -188,17 +188,23 @@ export default function TaskAlertModal({
                   ‹
                 </Text>
               </TouchableOpacity>
-              <View style={styles.dotsRow}>
-                {tasks.map((_, i) => (
-                  <View
-                    key={i}
-                    style={[
-                      styles.dot,
-                      i === index ? styles.dotActive : styles.dotInactive,
-                    ]}
-                  />
-                ))}
-              </View>
+              {total <= 5 ? (
+                <View style={styles.dotsRow}>
+                  {tasks.map((_, i) => (
+                    <View
+                      key={i}
+                      style={[
+                        styles.dot,
+                        i === index ? styles.dotActive : styles.dotInactive,
+                      ]}
+                    />
+                  ))}
+                </View>
+              ) : (
+                <Text style={styles.counter}>
+                  {index + 1} of {total}
+                </Text>
+              )}
               <TouchableOpacity
                 onPress={() => goTo(index + 1)}
                 disabled={index === total - 1}
