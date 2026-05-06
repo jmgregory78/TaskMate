@@ -54,6 +54,7 @@ export interface SuggestedSupply {
   id: string;
   name: string;
   defaultQty: number;
+  containerSize: number;
   unit: string;
   notes?: string;
   icon?: string;
@@ -193,11 +194,11 @@ export const SUGGESTED_SUPPLIES: SuggestedSupplyCategory[] = [
     emoji: '💊',
     name: 'Health & Wellness',
     supplies: [
-      { id: 'prescription', name: 'Prescription Medication', defaultQty: 60, unit: 'doses', notes: 'Refill when running low', icon: '💊' },
-      { id: 'vitamins', name: 'Vitamins / Supplements', defaultQty: 90, unit: 'tablets', icon: '🌱' },
-      { id: 'contacts', name: 'Contact Lenses', defaultQty: 90, unit: 'lenses', icon: '👁️' },
-      { id: 'first-aid', name: 'First Aid Kit', defaultQty: 1, unit: 'kit', icon: '🩹' },
-      { id: 'sunscreen', name: 'Sunscreen', defaultQty: 2, unit: 'bottles', icon: '☀️' },
+      { id: 'prescription', name: 'Prescription Medication', defaultQty: 60, containerSize: 30, unit: 'doses', notes: 'Refill when running low', icon: '💊' },
+      { id: 'vitamins', name: 'Vitamins / Supplements', defaultQty: 90, containerSize: 90, unit: 'tablets', icon: '🌱' },
+      { id: 'contacts', name: 'Contact Lenses', defaultQty: 90, containerSize: 90, unit: 'lenses', icon: '👁️' },
+      { id: 'first-aid', name: 'First Aid Kit', defaultQty: 1, containerSize: 1, unit: 'kit', icon: '🩹' },
+      { id: 'sunscreen', name: 'Sunscreen', defaultQty: 2, containerSize: 2, unit: 'bottles', icon: '☀️' },
     ],
   },
   {
@@ -205,11 +206,11 @@ export const SUGGESTED_SUPPLIES: SuggestedSupplyCategory[] = [
     emoji: '🏠',
     name: 'Home Systems',
     supplies: [
-      { id: 'hvac-filters', name: 'HVAC Filters', defaultQty: 3, unit: 'filters', icon: '🌬️' },
-      { id: 'smoke-batteries', name: 'Smoke Detector Batteries (9V)', defaultQty: 8, unit: 'batteries', icon: '🔋' },
-      { id: 'fridge-water-filter', name: 'Refrigerator Water Filter', defaultQty: 2, unit: 'filters', icon: '💧' },
-      { id: 'pitcher-filters', name: 'Water Pitcher Filters (Brita)', defaultQty: 3, unit: 'filters', icon: '💧' },
-      { id: 'range-hood-filter', name: 'Range Hood Grease Filter', defaultQty: 2, unit: 'filters', icon: '🔥' },
+      { id: 'hvac-filters', name: 'HVAC Filters', defaultQty: 3, containerSize: 4, unit: 'filters', icon: '🌬️' },
+      { id: 'smoke-batteries', name: 'Smoke Detector Batteries (9V)', defaultQty: 8, containerSize: 8, unit: 'batteries', icon: '🔋' },
+      { id: 'fridge-water-filter', name: 'Refrigerator Water Filter', defaultQty: 2, containerSize: 2, unit: 'filters', icon: '💧' },
+      { id: 'pitcher-filters', name: 'Water Pitcher Filters (Brita)', defaultQty: 3, containerSize: 3, unit: 'filters', icon: '💧' },
+      { id: 'range-hood-filter', name: 'Range Hood Grease Filter', defaultQty: 2, containerSize: 2, unit: 'filters', icon: '🔥' },
     ],
   },
   {
@@ -217,11 +218,11 @@ export const SUGGESTED_SUPPLIES: SuggestedSupplyCategory[] = [
     emoji: '🚗',
     name: 'Vehicles',
     supplies: [
-      { id: 'wipers', name: 'Windshield Wipers', defaultQty: 1, unit: 'pairs', icon: '🚗' },
-      { id: 'cabin-filter', name: 'Car Cabin Air Filter', defaultQty: 1, unit: 'filters', icon: '🌬️' },
-      { id: 'small-engine-oil', name: 'Small Engine Oil (Lawnmower/Pressure Washer)', defaultQty: 2, unit: 'quarts', icon: '🛢️' },
-      { id: 'spark-plugs', name: 'Spark Plugs (Small Engine)', defaultQty: 4, unit: 'plugs', notes: 'For lawnmower, pressure washer, generator', icon: '🔌' },
-      { id: 'pressure-washer-nozzles', name: 'Pressure Washer Nozzle Set', defaultQty: 1, unit: 'set', icon: '💦' },
+      { id: 'wipers', name: 'Windshield Wipers', defaultQty: 1, containerSize: 1, unit: 'pairs', icon: '🚗' },
+      { id: 'cabin-filter', name: 'Car Cabin Air Filter', defaultQty: 1, containerSize: 1, unit: 'filters', icon: '🌬️' },
+      { id: 'small-engine-oil', name: 'Small Engine Oil (Lawnmower/Pressure Washer)', defaultQty: 2, containerSize: 2, unit: 'quarts', icon: '🛢️' },
+      { id: 'spark-plugs', name: 'Spark Plugs (Small Engine)', defaultQty: 4, containerSize: 4, unit: 'plugs', notes: 'For lawnmower, pressure washer, generator', icon: '🔌' },
+      { id: 'pressure-washer-nozzles', name: 'Pressure Washer Nozzle Set', defaultQty: 1, containerSize: 1, unit: 'set', icon: '💦' },
     ],
   },
   {
@@ -229,8 +230,8 @@ export const SUGGESTED_SUPPLIES: SuggestedSupplyCategory[] = [
     emoji: '🍽️',
     name: 'Kitchen & Appliances',
     supplies: [
-      { id: 'dishwasher-cleaner', name: 'Dishwasher Cleaner', defaultQty: 3, unit: 'tablets', icon: '🍽️' },
-      { id: 'washer-cleaner', name: 'Washing Machine Cleaner', defaultQty: 3, unit: 'tablets', icon: '🧺' },
+      { id: 'dishwasher-cleaner', name: 'Dishwasher Cleaner', defaultQty: 3, containerSize: 3, unit: 'tablets', icon: '🍽️' },
+      { id: 'washer-cleaner', name: 'Washing Machine Cleaner', defaultQty: 3, containerSize: 3, unit: 'tablets', icon: '🧺' },
     ],
   },
   {
@@ -238,10 +239,10 @@ export const SUGGESTED_SUPPLIES: SuggestedSupplyCategory[] = [
     emoji: '🌿',
     name: 'Outdoor & Garden',
     supplies: [
-      { id: 'lawn-fertilizer', name: 'Lawn Fertilizer', defaultQty: 2, unit: 'bags', icon: '🌱' },
-      { id: 'pest-control', name: 'Pest Control Spray/Bait', defaultQty: 2, unit: 'cans', icon: '🐜' },
-      { id: 'ice-melt', name: 'Ice Melt / Rock Salt', defaultQty: 1, unit: 'bags', icon: '❄️' },
-      { id: 'softener-salt', name: 'Water Softener Salt', defaultQty: 2, unit: 'bags', icon: '🧂' },
+      { id: 'lawn-fertilizer', name: 'Lawn Fertilizer', defaultQty: 2, containerSize: 2, unit: 'bags', icon: '🌱' },
+      { id: 'pest-control', name: 'Pest Control Spray/Bait', defaultQty: 2, containerSize: 2, unit: 'cans', icon: '🐜' },
+      { id: 'ice-melt', name: 'Ice Melt / Rock Salt', defaultQty: 1, containerSize: 1, unit: 'bags', icon: '❄️' },
+      { id: 'softener-salt', name: 'Water Softener Salt', defaultQty: 2, containerSize: 2, unit: 'bags', icon: '🧂' },
     ],
   },
   {
@@ -249,9 +250,9 @@ export const SUGGESTED_SUPPLIES: SuggestedSupplyCategory[] = [
     emoji: '🐾',
     name: 'Pet Care',
     supplies: [
-      { id: 'pet-flea-tick', name: 'Flea & Tick Treatment', defaultQty: 6, unit: 'doses', icon: '🐛' },
-      { id: 'pet-heartworm', name: 'Heartworm Prevention Pills', defaultQty: 6, unit: 'doses', icon: '💊' },
-      { id: 'pet-food', name: 'Pet Food', defaultQty: 1, unit: 'bag', icon: '🐾' },
+      { id: 'pet-flea-tick', name: 'Flea & Tick Treatment', defaultQty: 6, containerSize: 6, unit: 'doses', icon: '🐛' },
+      { id: 'pet-heartworm', name: 'Heartworm Prevention Pills', defaultQty: 6, containerSize: 6, unit: 'doses', icon: '💊' },
+      { id: 'pet-food', name: 'Pet Food', defaultQty: 1, containerSize: 1, unit: 'bag', icon: '🐾' },
     ],
   },
   {
@@ -259,9 +260,9 @@ export const SUGGESTED_SUPPLIES: SuggestedSupplyCategory[] = [
     emoji: '🏊',
     name: 'Pool & Spa',
     supplies: [
-      { id: 'pool-chlorine', name: 'Pool Chlorine Tablets', defaultQty: 50, unit: 'tablets', icon: '🏊' },
-      { id: 'pool-shock', name: 'Pool Shock', defaultQty: 4, unit: 'bags', icon: '⚡' },
-      { id: 'hot-tub-chemicals', name: 'Hot Tub Chemicals', defaultQty: 1, unit: 'kit', icon: '♨️' },
+      { id: 'pool-chlorine', name: 'Pool Chlorine Tablets', defaultQty: 50, containerSize: 50, unit: 'tablets', icon: '🏊' },
+      { id: 'pool-shock', name: 'Pool Shock', defaultQty: 4, containerSize: 4, unit: 'bags', icon: '⚡' },
+      { id: 'hot-tub-chemicals', name: 'Hot Tub Chemicals', defaultQty: 1, containerSize: 1, unit: 'kit', icon: '♨️' },
     ],
   },
   {
@@ -269,8 +270,8 @@ export const SUGGESTED_SUPPLIES: SuggestedSupplyCategory[] = [
     emoji: '⚡',
     name: 'Emergency & Seasonal',
     supplies: [
-      { id: 'fuel-stabilizer', name: 'Generator Fuel Stabilizer', defaultQty: 1, unit: 'bottles', icon: '⛽' },
-      { id: 'septic-tablets', name: 'Septic Treatment Tablets', defaultQty: 12, unit: 'tablets', icon: '🚽' },
+      { id: 'fuel-stabilizer', name: 'Generator Fuel Stabilizer', defaultQty: 1, containerSize: 1, unit: 'bottles', icon: '⛽' },
+      { id: 'septic-tablets', name: 'Septic Treatment Tablets', defaultQty: 12, containerSize: 12, unit: 'tablets', icon: '🚽' },
     ],
   },
 ];

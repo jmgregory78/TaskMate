@@ -81,7 +81,7 @@ type SupplyPromptState =
       taskId: string;
     };
 
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 3;
 
 const FREQUENCY_OPTIONS: { key: RecurrenceFrequency; label: string }[] = [
   { key: 'daily', label: 'Daily' },
@@ -96,6 +96,40 @@ const REMINDER_OPTIONS: { days: number | null; label: string }[] = [
   { days: 3, label: '3 days before' },
   { days: 7, label: '1 week before' },
 ];
+
+const REMINDER_PRESET_VALUES = new Set(
+  REMINDER_OPTIONS.map((o) => o.days).filter((d): d is number => d !== null)
+);
+
+type CustomReminderUnit = 'days' | 'weeks' | 'months';
+
+const CUSTOM_UNIT_OPTIONS: { key: CustomReminderUnit; label: string; multiplier: number }[] = [
+  { key: 'days', label: 'Days', multiplier: 1 },
+  { key: 'weeks', label: 'Weeks', multiplier: 7 },
+  { key: 'months', label: 'Months', multiplier: 30 },
+];
+
+function customReminderLabel(days: number): string {
+  if (days % 30 === 0 && days >= 30) {
+    const months = days / 30;
+    return `${months} ${months === 1 ? 'month' : 'months'} before`;
+  }
+  if (days % 7 === 0 && days >= 7) {
+    const weeks = days / 7;
+    return `${weeks} ${weeks === 1 ? 'week' : 'weeks'} before`;
+  }
+  return `${days} ${days === 1 ? 'day' : 'days'} before`;
+}
+
+function daysToUnitAndValue(days: number): { value: number; unit: CustomReminderUnit } {
+  if (days % 30 === 0 && days >= 30) {
+    return { value: days / 30, unit: 'months' };
+  }
+  if (days % 7 === 0 && days >= 7) {
+    return { value: days / 7, unit: 'weeks' };
+  }
+  return { value: days, unit: 'days' };
+}
 
 function normalize(name: string): string {
   return name.trim().toLowerCase();
@@ -146,7 +180,8 @@ export default function SetupWizardScreen() {
   const householdId = useAppStore((s) => s.currentHouseholdId);
   const { user } = useAuth();
 
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [expandedCategoryIds, setExpandedCategoryIds] = useState<Set<WizardCategoryId>>(new Set());
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [existingTaskNames, setExistingTaskNames] = useState<Set<string>>(
@@ -156,11 +191,6 @@ export default function SetupWizardScreen() {
     new Set()
   );
   const [existingProducts, setExistingProducts] = useState<Product[]>([]);
-  // CHANGE 1: all category/task/supply selections start EMPTY (nothing
-  // pre-checked). User must opt in.
-  const [selectedCategoryIds, setSelectedCategoryIds] = useState<
-    Set<WizardCategoryId>
-  >(new Set());
   const [checkedTaskIds, setCheckedTaskIds] = useState<Set<string>>(new Set());
   const [checkedSupplyIds, setCheckedSupplyIds] = useState<Set<string>>(
     new Set()
@@ -210,42 +240,29 @@ export default function SetupWizardScreen() {
     };
   }, [householdId]);
 
-  // Categories with at least one un-added task or supply
-  const availableCategories: WizardCategory[] = useMemo(() => {
-    return WIZARD_CATEGORIES.filter((cat) => {
-      const remTasks = getSuggestedTasksFor(cat.id).some(
-        (t) => !existingTaskNames.has(normalize(t.name))
-      );
-      const remSupplies = getSuggestedSuppliesFor(cat.id).some(
-        (s) => !existingSupplyNames.has(normalize(s.name))
-      );
-      return remTasks || remSupplies;
-    });
-  }, [existingTaskNames, existingSupplyNames]);
-
+  // All categories with at least one remaining task (for accordion display)
   const taskGroups: TaskGroup[] = useMemo(() => {
     const groups: TaskGroup[] = [];
     for (const cat of WIZARD_CATEGORIES) {
-      if (!selectedCategoryIds.has(cat.id)) continue;
       const items = getSuggestedTasksFor(cat.id).filter(
         (t) => !existingTaskNames.has(normalize(t.name))
       );
       if (items.length > 0) groups.push({ category: cat, items });
     }
     return groups;
-  }, [selectedCategoryIds, existingTaskNames]);
+  }, [existingTaskNames]);
 
+  // All categories with at least one remaining supply
   const supplyGroups: SupplyGroup[] = useMemo(() => {
     const groups: SupplyGroup[] = [];
     for (const cat of WIZARD_CATEGORIES) {
-      if (!selectedCategoryIds.has(cat.id)) continue;
       const items = getSuggestedSuppliesFor(cat.id).filter(
         (s) => !existingSupplyNames.has(normalize(s.name))
       );
       if (items.length > 0) groups.push({ category: cat, items });
     }
     return groups;
-  }, [selectedCategoryIds, existingSupplyNames]);
+  }, [existingSupplyNames]);
 
   const totalAvailableTasks = useMemo(
     () =>
@@ -290,14 +307,16 @@ export default function SetupWizardScreen() {
   );
 
   // ----- Step navigation -----
+  // Step 1 (accordion tasks) -> configure queue -> Step 2 (supplies) -> Step 3 (done)
+  // For 'fromTasks' mode, skip Step 2 and go directly back to Timeline
   const advanceFrom1 = () => {
-    if (taskGroups.length > 0) setStep(2);
-    else if (supplyGroups.length > 0) setStep(3);
-    else setStep(4);
-  };
-  const advanceFrom2 = () => {
-    if (supplyGroups.length > 0) setStep(3);
-    else setStep(4);
+    if (mode === 'fromTasks') {
+      // When adding tasks from the Tasks tab, skip supplies step and return to Timeline
+      navigation.navigate('Main', { screen: 'Tasks' });
+      return;
+    }
+    if (supplyGroups.length > 0) setStep(2);
+    else setStep(3);
   };
 
   const updateDraft = (taskId: string, patch: Partial<TaskDraft>) => {
@@ -311,7 +330,7 @@ export default function SetupWizardScreen() {
   // CHANGE 2: kick off the per-task configuration queue.
   const startConfigureQueue = () => {
     if (checkedTasks.length === 0) {
-      advanceFrom2();
+      advanceFrom1();
       return;
     }
     setSubmitError(null);
@@ -342,7 +361,7 @@ export default function SetupWizardScreen() {
       // Queue done — exit config mode and continue to supplies
       setConfigIndex(null);
       setTaskQueue([]);
-      advanceFrom2();
+      advanceFrom1();
     } else {
       setConfigIndex(nextIndex);
     }
@@ -415,7 +434,16 @@ export default function SetupWizardScreen() {
     if (configIndex !== null) advanceConfigQueue(next);
   };
 
-  const handleSupplyPromptAdd = async (qty: number) => {
+  const handleSupplyPromptAdd = async (data: {
+    name: string;
+    qty: number;
+    containerSize: number;
+    unit: string;
+    amazonUrl: string;
+    thresholdType: 'qty' | 'pct';
+    thresholdQty: number;
+    thresholdPct: number;
+  }) => {
     if (supplyPrompt?.scenario !== 'add') return;
     if (!user || !householdId) return;
     const userLabel = user.displayName ?? user.email ?? user.uid;
@@ -424,12 +452,13 @@ export default function SetupWizardScreen() {
     try {
       const newId = await createProduct(householdId, userLabel, {
         householdId,
-        name: supply.name,
-        amazonUrl: '',
-        containerSize: supply.defaultQty,
-        containerUnit: supply.unit,
-        currentQuantity: qty,
-        lowThresholdPercent: 25,
+        name: data.name,
+        amazonUrl: data.amazonUrl,
+        containerSize: data.containerSize,
+        containerUnit: data.unit,
+        currentQuantity: data.qty,
+        lowThresholdPercent: data.thresholdType === 'pct' ? data.thresholdPct : 25,
+        lowThresholdQty: data.thresholdType === 'qty' ? data.thresholdQty : null,
       });
       // Link the new supply to the task that triggered this prompt by writing
       // a TaskProductUsage record. Default usage = 1 of the supply's unit per
@@ -441,9 +470,9 @@ export default function SetupWizardScreen() {
           householdId,
           taskId,
           newId,
-          supply.name,
+          data.name,
           1,
-          supply.unit
+          data.unit
         );
       } catch (e) {
         console.warn('[SetupWizard] link new supply to task failed:', e);
@@ -453,7 +482,7 @@ export default function SetupWizardScreen() {
       // would see scenario 'update', and the supplies-step filtering hides it.
       setExistingSupplyNames((prev) => {
         const next = new Set(prev);
-        next.add(normalize(supply.name));
+        next.add(normalize(data.name));
         return next;
       });
       setExistingProducts((prev) => [
@@ -461,12 +490,13 @@ export default function SetupWizardScreen() {
         {
           id: newId,
           householdId,
-          name: supply.name,
-          amazonUrl: '',
-          containerSize: supply.defaultQty,
-          containerUnit: supply.unit,
-          currentQuantity: qty,
-          lowThresholdPercent: 25,
+          name: data.name,
+          amazonUrl: data.amazonUrl,
+          containerSize: data.containerSize,
+          containerUnit: data.unit,
+          currentQuantity: data.qty,
+          lowThresholdPercent: data.thresholdType === 'pct' ? data.thresholdPct : 25,
+          lowThresholdQty: data.thresholdType === 'qty' ? data.thresholdQty : null,
           lastPurchasedAt: null,
           lastPurchasePrice: null,
           purchasePending: false,
@@ -531,12 +561,12 @@ export default function SetupWizardScreen() {
     setSubmitError(null);
     setShowDatePicker(false);
     if (configIndex === 0) {
-      // First task → return to the suggested-tasks checklist (Step 2).
+      // First task → return to the accordion task selection (Step 1).
       // Drafts are intentionally NOT cleared so re-entering the queue
       // restores the user's edits.
       setConfigIndex(null);
       setTaskQueue([]);
-      setStep(2);
+      setStep(1);
     } else {
       setConfigIndex(configIndex - 1);
     }
@@ -545,7 +575,7 @@ export default function SetupWizardScreen() {
   const handleAddSupplies = async () => {
     if (!user || !householdId) return;
     if (checkedSupplies.length === 0) {
-      setStep(4);
+      setStep(3);
       return;
     }
     setSubmitting(true);
@@ -570,7 +600,7 @@ export default function SetupWizardScreen() {
       );
       setAddedSupplyCount(writtenSupplyIds.current.size);
       setSubmitting(false);
-      setStep(4);
+      setStep(3);
     } catch (e) {
       const err = e as { message?: string };
       setSubmitError(err.message ?? String(e));
@@ -581,11 +611,11 @@ export default function SetupWizardScreen() {
 
   const handleSkipTasks = () => {
     setSubmitError(null);
-    advanceFrom2();
+    advanceFrom1();
   };
   const handleSkipSupplies = () => {
     setSubmitError(null);
-    setStep(4);
+    setStep(3);
   };
 
   const handleClose = () => {
@@ -611,8 +641,8 @@ export default function SetupWizardScreen() {
     }
   };
 
-  const toggleCategory = (id: WizardCategoryId) => {
-    setSelectedCategoryIds((prev) => {
+  const toggleCategoryExpanded = (id: WizardCategoryId) => {
+    setExpandedCategoryIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -650,7 +680,7 @@ export default function SetupWizardScreen() {
   // ----- Render -----
   const inConfigQueue = configIndex !== null;
   const showCloseButton =
-    mode !== 'firstTime' && step !== 4 && !inConfigQueue;
+    mode !== 'firstTime' && step !== 3 && !inConfigQueue;
   const showBackButton = inConfigQueue;
 
   if (!loaded) {
@@ -750,23 +780,18 @@ export default function SetupWizardScreen() {
             error={submitError}
           />
         ) : step === 1 ? (
-          <Step1
-            categories={availableCategories}
-            selectedIds={selectedCategoryIds}
-            onToggle={toggleCategory}
-            onNext={advanceFrom1}
-          />
-        ) : step === 2 ? (
-          <Step2
+          <Step1Accordion
             groups={taskGroups}
+            expandedIds={expandedCategoryIds}
             checkedIds={checkedTaskIds}
-            onToggle={toggleTask}
+            onToggleExpand={toggleCategoryExpanded}
+            onToggleTask={toggleTask}
             onSkip={handleSkipTasks}
             onAdd={startConfigureQueue}
             checkedCount={checkedTasks.length}
           />
-        ) : step === 3 ? (
-          <Step3
+        ) : step === 2 ? (
+          <Step2Supplies
             groups={supplyGroups}
             checkedIds={checkedSupplyIds}
             onToggle={toggleSupply}
@@ -776,8 +801,8 @@ export default function SetupWizardScreen() {
             error={submitError}
             checkedCount={checkedSupplies.length}
           />
-        ) : step === 4 ? (
-          <Step4
+        ) : step === 3 ? (
+          <Step3Done
             mode={mode}
             taskCount={addedTaskCount}
             supplyCount={addedSupplyCount}
@@ -803,7 +828,7 @@ function Header({
   showClose,
   onClose,
 }: {
-  step: 1 | 2 | 3 | 4 | null;
+  step: 1 | 2 | 3 | null;
   showBack: boolean;
   onBack: () => void;
   showClose: boolean;
@@ -860,136 +885,91 @@ function Header({
   );
 }
 
-// ----- Step 1 -----
-function Step1({
-  categories,
-  selectedIds,
-  onToggle,
-  onNext,
-}: {
-  categories: WizardCategory[];
-  selectedIds: Set<WizardCategoryId>;
-  onToggle: (id: WizardCategoryId) => void;
-  onNext: () => void;
-}) {
-  return (
-    <>
-      <View style={styles.titleBlock}>
-        <Text style={styles.title}>Let's set up your household</Text>
-        <Text style={styles.subtitle}>
-          Select everything that applies — we'll suggest the right tasks and
-          supplies
-        </Text>
-      </View>
-      <ScrollView
-        style={styles.flex}
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
-        {categories.map((cat) => {
-          const selected = selectedIds.has(cat.id);
-          return (
-            <TouchableOpacity
-              key={cat.id}
-              style={[styles.categoryCard, selected && styles.categoryCardOn]}
-              onPress={() => onToggle(cat.id)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.categoryEmoji}>{cat.emoji}</Text>
-              <Text
-                style={[
-                  styles.categoryName,
-                  selected && styles.categoryNameOn,
-                ]}
-              >
-                {cat.name}
-              </Text>
-              <Checkbox checked={selected} />
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
-      <View style={styles.bottomBar}>
-        <TouchableOpacity
-          style={[
-            styles.primaryButton,
-            selectedIds.size === 0 && styles.primaryButtonDisabled,
-          ]}
-          onPress={onNext}
-          activeOpacity={0.85}
-          disabled={selectedIds.size === 0}
-        >
-          <Text style={styles.primaryButtonText}>Next →</Text>
-        </TouchableOpacity>
-      </View>
-    </>
-  );
-}
-
-// ----- Step 2 -----
-function Step2({
+// ----- Step 1: Accordion Tasks -----
+function Step1Accordion({
   groups,
+  expandedIds,
   checkedIds,
-  onToggle,
+  onToggleExpand,
+  onToggleTask,
   onSkip,
   onAdd,
   checkedCount,
 }: {
   groups: TaskGroup[];
+  expandedIds: Set<WizardCategoryId>;
   checkedIds: Set<string>;
-  onToggle: (id: string) => void;
+  onToggleExpand: (id: WizardCategoryId) => void;
+  onToggleTask: (id: string) => void;
   onSkip: () => void;
   onAdd: () => void;
   checkedCount: number;
 }) {
+  // Count selected tasks per category
+  const selectedCountByCategory = (categoryId: WizardCategoryId): number => {
+    const group = groups.find((g) => g.category.id === categoryId);
+    if (!group) return 0;
+    return group.items.filter((t) => checkedIds.has(t.id)).length;
+  };
+
   return (
     <>
       <View style={styles.titleBlock}>
-        <View style={styles.titleRow}>
-          <View style={styles.flex}>
-            <Text style={styles.title}>Suggested Tasks</Text>
-            <Text style={styles.subtitle}>
-              Check the tasks you want to add to your household.
-            </Text>
-          </View>
-          <TouchableOpacity
-            onPress={onSkip}
-            style={styles.skipLink}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.skipText}>Skip</Text>
-          </TouchableOpacity>
-        </View>
+        <Text style={styles.title}>Set up your household</Text>
+        <Text style={styles.subtitle}>Choose the tasks you want to track</Text>
       </View>
       <ScrollView
         style={styles.flex}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
-        {groups.map((g) => (
-          <View key={g.category.id} style={styles.groupBlock}>
-            <Text style={styles.groupHeader}>
-              {g.category.emoji} {g.category.name}
-            </Text>
-            {g.items.map((t) => {
-              const checked = checkedIds.has(t.id);
-              return (
-                <TouchableOpacity
-                  key={t.id}
-                  style={[styles.itemRow, checked && styles.itemRowOn]}
-                  onPress={() => onToggle(t.id)}
-                  activeOpacity={0.7}
-                >
-                  <Checkbox checked={checked} />
-                  {t.icon ? (
-                    <Text style={styles.itemIcon}>{t.icon}</Text>
-                  ) : null}
-                  <Text style={styles.itemName}>{t.name}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        ))}
+        {groups.map((g) => {
+          const expanded = expandedIds.has(g.category.id);
+          const selectedCount = selectedCountByCategory(g.category.id);
+          return (
+            <View key={g.category.id} style={styles.accordionCard}>
+              <TouchableOpacity
+                style={styles.accordionHeader}
+                onPress={() => onToggleExpand(g.category.id)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.categoryEmoji}>{g.category.emoji}</Text>
+                <Text style={styles.accordionTitle}>{g.category.name}</Text>
+                {selectedCount > 0 ? (
+                  <View style={styles.selectedBadge}>
+                    <Text style={styles.selectedBadgeText}>
+                      {selectedCount} selected
+                    </Text>
+                  </View>
+                ) : null}
+                <Text style={styles.accordionChevron}>
+                  {expanded ? '▾' : '▸'}
+                </Text>
+              </TouchableOpacity>
+              {expanded ? (
+                <View style={styles.accordionContent}>
+                  {g.items.map((t) => {
+                    const checked = checkedIds.has(t.id);
+                    return (
+                      <TouchableOpacity
+                        key={t.id}
+                        style={[styles.itemRow, checked && styles.itemRowOn]}
+                        onPress={() => onToggleTask(t.id)}
+                        activeOpacity={0.7}
+                      >
+                        <Checkbox checked={checked} />
+                        {t.icon ? (
+                          <Text style={styles.itemIcon}>{t.icon}</Text>
+                        ) : null}
+                        <Text style={styles.itemName}>{t.name}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ) : null}
+            </View>
+          );
+        })}
       </ScrollView>
       <View style={styles.bottomBar}>
         <TouchableOpacity
@@ -1006,6 +986,13 @@ function Step2({
               ? 'Add 0 Tasks'
               : `Add ${checkedCount} ${checkedCount === 1 ? 'Task' : 'Tasks'} →`}
           </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={onSkip}
+          style={styles.skipFullRow}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.skipText}>Skip</Text>
         </TouchableOpacity>
       </View>
     </>
@@ -1040,6 +1027,54 @@ function ConfigureTaskStep({
   submitting: boolean;
   error: string | null;
 }) {
+  // Custom reminder state
+  const isCustomValue = draft.reminderDays !== null && !REMINDER_PRESET_VALUES.has(draft.reminderDays);
+  const initialCustom = isCustomValue && draft.reminderDays !== null
+    ? daysToUnitAndValue(draft.reminderDays)
+    : { value: 1, unit: 'days' as CustomReminderUnit };
+  const [showCustomInput, setShowCustomInput] = useState(isCustomValue);
+  const [customValue, setCustomValue] = useState(String(initialCustom.value));
+  const [customUnit, setCustomUnit] = useState<CustomReminderUnit>(initialCustom.unit);
+
+  const handleSelectPreset = (days: number | null) => {
+    setShowCustomInput(false);
+    onUpdateDraft({ reminderDays: days });
+  };
+
+  const handleSelectCustom = () => {
+    setShowCustomInput(true);
+    // Set a default custom value
+    const multiplier = CUSTOM_UNIT_OPTIONS.find((u) => u.key === customUnit)?.multiplier ?? 1;
+    const num = parseInt(customValue, 10) || 1;
+    onUpdateDraft({ reminderDays: num * multiplier });
+  };
+
+  const handleCustomValueChange = (text: string) => {
+    const digitsOnly = text.replace(/\D/g, '');
+    setCustomValue(digitsOnly);
+    const num = parseInt(digitsOnly, 10) || 1;
+    const multiplier = CUSTOM_UNIT_OPTIONS.find((u) => u.key === customUnit)?.multiplier ?? 1;
+    onUpdateDraft({ reminderDays: num * multiplier });
+  };
+
+  const handleUnitChange = (unit: CustomReminderUnit) => {
+    setCustomUnit(unit);
+    const num = parseInt(customValue, 10) || 1;
+    const multiplier = CUSTOM_UNIT_OPTIONS.find((u) => u.key === unit)?.multiplier ?? 1;
+    onUpdateDraft({ reminderDays: num * multiplier });
+  };
+
+  const handleConfirmCustom = () => {
+    const num = parseInt(customValue, 10) || 1;
+    const multiplier = CUSTOM_UNIT_OPTIONS.find((u) => u.key === customUnit)?.multiplier ?? 1;
+    onUpdateDraft({ reminderDays: num * multiplier });
+    setShowCustomInput(false);
+  };
+
+  const customDisplayLabel = isCustomValue && draft.reminderDays !== null
+    ? customReminderLabel(draft.reminderDays)
+    : 'Custom...';
+
   return (
     <>
       <View style={styles.titleBlock}>
@@ -1124,15 +1159,15 @@ function ConfigureTaskStep({
 
         <Text style={styles.fieldLabel}>Advance Reminder</Text>
         <View style={styles.reminderColumn}>
-          {REMINDER_OPTIONS.map((opt, idx) => {
-            const active = opt.days === draft.reminderDays;
+          {REMINDER_OPTIONS.map((opt) => {
+            const active = opt.days === draft.reminderDays && !showCustomInput;
             const key = opt.days === null ? 'none' : String(opt.days);
             const isNoAdvanceReminder = opt.days === null;
             return (
               <View key={key}>
                 <TouchableOpacity
                   style={[styles.reminderRow, active && styles.reminderRowOn]}
-                  onPress={() => onUpdateDraft({ reminderDays: opt.days })}
+                  onPress={() => handleSelectPreset(opt.days)}
                   activeOpacity={0.7}
                   disabled={submitting}
                 >
@@ -1156,6 +1191,74 @@ function ConfigureTaskStep({
               </View>
             );
           })}
+          {/* Custom option */}
+          <TouchableOpacity
+            style={[
+              styles.reminderRow,
+              (isCustomValue || showCustomInput) && styles.reminderRowOn,
+            ]}
+            onPress={handleSelectCustom}
+            activeOpacity={0.7}
+            disabled={submitting}
+          >
+            <Text
+              style={[
+                styles.reminderText,
+                (isCustomValue || showCustomInput) && styles.reminderTextOn,
+              ]}
+            >
+              {customDisplayLabel}
+            </Text>
+            {isCustomValue && !showCustomInput ? (
+              <Text style={styles.reminderCheck}>✓</Text>
+            ) : null}
+          </TouchableOpacity>
+          {showCustomInput ? (
+            <View style={styles.customReminderBox}>
+              <View style={styles.customReminderRow}>
+                <TextInput
+                  style={styles.customReminderInput}
+                  value={customValue}
+                  onChangeText={handleCustomValueChange}
+                  keyboardType="number-pad"
+                  maxLength={3}
+                  selectTextOnFocus
+                  editable={!submitting}
+                />
+                <View style={styles.customUnitRow}>
+                  {CUSTOM_UNIT_OPTIONS.map((u) => {
+                    const active = customUnit === u.key;
+                    return (
+                      <TouchableOpacity
+                        key={u.key}
+                        style={[styles.customUnitChip, active && styles.customUnitChipOn]}
+                        onPress={() => handleUnitChange(u.key)}
+                        activeOpacity={0.7}
+                        disabled={submitting}
+                      >
+                        <Text
+                          style={[
+                            styles.customUnitText,
+                            active && styles.customUnitTextOn,
+                          ]}
+                        >
+                          {u.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+              <TouchableOpacity
+                style={styles.customConfirmButton}
+                onPress={handleConfirmCustom}
+                activeOpacity={0.7}
+                disabled={submitting}
+              >
+                <Text style={styles.customConfirmText}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
         </View>
       </ScrollView>
       <View style={styles.bottomBar}>
@@ -1197,8 +1300,8 @@ function unitWord(frequency: RecurrenceFrequency, interval: number): string {
   return interval === 1 ? base : `${base}s`;
 }
 
-// ----- Step 3 -----
-function Step3({
+// ----- Step 2: Supplies -----
+function Step2Supplies({
   groups,
   checkedIds,
   onToggle,
@@ -1299,7 +1402,9 @@ function Step3({
   );
 }
 
-// ----- SupplySheet (CHANGE 2 — prompt after a task is saved) -----
+// ----- SupplySheet (prompt after a task is saved) -----
+type ThresholdType = 'qty' | 'pct';
+
 function SupplySheet({
   prompt,
   onAdd,
@@ -1307,22 +1412,36 @@ function SupplySheet({
   onDismiss,
 }: {
   prompt: SupplyPromptState | null;
-  onAdd: (qty: number) => void;
+  onAdd: (data: {
+    name: string;
+    qty: number;
+    containerSize: number;
+    unit: string;
+    amazonUrl: string;
+    thresholdType: ThresholdType;
+    thresholdQty: number;
+    thresholdPct: number;
+  }) => void;
   onUpdate: (qty: number) => void;
   onDismiss: () => void;
 }) {
   const insets = useSafeAreaInsets();
-  // Local qty state, seeded from the prompt's default whenever a new prompt
-  // becomes visible. We key the input by supply id + scenario so it resets
-  // cleanly between prompts within one wizard session.
-  const seedQty = (() => {
-    if (!prompt) return '0';
-    return prompt.scenario === 'add'
-      ? String(prompt.supply.defaultQty)
-      : String(prompt.product.currentQuantity);
-  })();
-  const [qtyText, setQtyText] = useState(seedQty);
+
+  // State for all editable fields
+  const [nameText, setNameText] = useState('');
+  const [qtyText, setQtyText] = useState('0');
+  const [containerSizeText, setContainerSizeText] = useState('1');
+  const [unitText, setUnitText] = useState('');
+  const [amazonUrl, setAmazonUrl] = useState('');
+
+  // Reorder threshold state
+  const [thresholdType, setThresholdType] = useState<ThresholdType>('qty');
+  const [thresholdQtyText, setThresholdQtyText] = useState('1');
+  const [thresholdPctText, setThresholdPctText] = useState('25');
+
+  // Track which prompt we've seeded for
   const seedKeyRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (!prompt) {
       seedKeyRef.current = null;
@@ -1331,32 +1450,80 @@ function SupplySheet({
     const key = `${prompt.scenario}:${prompt.supply.id}`;
     if (seedKeyRef.current !== key) {
       seedKeyRef.current = key;
-      setQtyText(seedQty);
+      // Seed all fields based on scenario
+      if (prompt.scenario === 'add') {
+        setNameText(prompt.supply.name);
+        setQtyText(String(prompt.supply.defaultQty));
+        setContainerSizeText(String(prompt.supply.containerSize));
+        setUnitText(prompt.supply.unit);
+        setAmazonUrl('');
+        // Reset threshold to defaults
+        setThresholdType('qty');
+        setThresholdQtyText('1');
+        setThresholdPctText('25');
+      } else {
+        setNameText(prompt.product.name);
+        setQtyText(String(prompt.product.currentQuantity));
+        setContainerSizeText(String(prompt.product.containerSize));
+        setUnitText(prompt.product.containerUnit || prompt.supply.unit);
+        setAmazonUrl(prompt.product.amazonUrl || '');
+      }
     }
-  }, [prompt, seedQty]);
+  }, [prompt]);
 
   if (!prompt) return null;
 
   const supply = prompt.supply;
+  const isAdd = prompt.scenario === 'add';
+
   const parsedQty = parseInt(qtyText, 10);
   const safeQty = Number.isFinite(parsedQty) && parsedQty >= 0 ? parsedQty : 0;
   const inc = () => setQtyText(String(safeQty + 1));
   const dec = () => setQtyText(String(Math.max(0, safeQty - 1)));
 
-  const isAdd = prompt.scenario === 'add';
-  const title = isAdd
-    ? `Set up your ${supply.name}?`
-    : `You have ${supply.name} in your supplies`;
-  const body = isAdd
-    ? "Track how many you have so TaskMate can remind you when you're running low."
-    : `You currently have ${prompt.product.currentQuantity} ${supply.unit}. Would you like to update the quantity?`;
-  const primaryLabel = isAdd ? 'Add to Supplies' : 'Update Quantity';
-  const secondaryLabel = isAdd ? 'Skip for Now' : 'Looks Good';
+  const parsedContainerSize = parseInt(containerSizeText, 10);
+  const safeContainerSize =
+    Number.isFinite(parsedContainerSize) && parsedContainerSize > 0
+      ? parsedContainerSize
+      : 1;
+
+  const title = isAdd ? 'Add New Supply' : 'Update Supply';
+
+  // Parse threshold values
+  const parsedThresholdQty = parseInt(thresholdQtyText, 10);
+  const safeThresholdQty =
+    Number.isFinite(parsedThresholdQty) && parsedThresholdQty >= 0
+      ? parsedThresholdQty
+      : 1;
+  const parsedThresholdPct = parseInt(thresholdPctText, 10);
+  const safeThresholdPct =
+    Number.isFinite(parsedThresholdPct) && parsedThresholdPct >= 0 && parsedThresholdPct <= 100
+      ? parsedThresholdPct
+      : 25;
+
+  // Calculate what the percentage threshold means in quantity terms (based on container size)
+  const pctAsQty = Math.floor((safeThresholdPct / 100) * safeContainerSize);
 
   const handlePrimary = () => {
-    if (isAdd) onAdd(safeQty);
-    else onUpdate(safeQty);
+    if (isAdd) {
+      onAdd({
+        name: nameText.trim() || supply.name,
+        qty: safeQty,
+        containerSize: safeContainerSize,
+        unit: unitText.trim() || supply.unit,
+        amazonUrl: amazonUrl.trim(),
+        thresholdType,
+        thresholdQty: safeThresholdQty,
+        thresholdPct: safeThresholdPct,
+      });
+    } else {
+      onUpdate(safeQty);
+    }
   };
+
+  const primaryLabel = isAdd ? 'Add to Supplies' : 'Update Quantity';
+  const secondaryLabel = isAdd ? 'Skip for Now' : 'Looks Good';
+  const canSubmit = isAdd ? nameText.trim().length > 0 : true;
 
   return (
     <Modal
@@ -1365,63 +1532,267 @@ function SupplySheet({
       animationType="slide"
       onRequestClose={onDismiss}
     >
-      <Pressable style={sheetStyles.overlay} onPress={onDismiss}>
-        <Pressable
-          style={[sheetStyles.sheet, { paddingBottom: insets.bottom + 16 }]}
-          onPress={() => {}}
-        >
-          <View style={sheetStyles.handle} />
-          <Text style={sheetStyles.title}>{title}</Text>
-          <Text style={sheetStyles.body}>{body}</Text>
-
-          <View style={sheetStyles.qtyRow}>
-            <TouchableOpacity
-              onPress={dec}
-              style={sheetStyles.stepperButton}
-              activeOpacity={0.7}
-              accessibilityLabel="Decrease quantity"
-            >
-              <Text style={sheetStyles.stepperButtonText}>−</Text>
-            </TouchableOpacity>
-            <TextInput
-              style={sheetStyles.qtyInput}
-              value={qtyText}
-              onChangeText={(v) => setQtyText(v.replace(/[^0-9]/g, ''))}
-              keyboardType="number-pad"
-              selectTextOnFocus
-            />
-            <TouchableOpacity
-              onPress={inc}
-              style={sheetStyles.stepperButton}
-              activeOpacity={0.7}
-              accessibilityLabel="Increase quantity"
-            >
-              <Text style={sheetStyles.stepperButtonText}>+</Text>
-            </TouchableOpacity>
-            <Text style={sheetStyles.unit}>{supply.unit}</Text>
-          </View>
-
-          <TouchableOpacity
-            style={sheetStyles.primaryButton}
-            onPress={handlePrimary}
-            activeOpacity={0.85}
+      <KeyboardAvoidingView
+        style={sheetStyles.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <Pressable style={sheetStyles.overlay} onPress={onDismiss}>
+          <Pressable
+            style={[sheetStyles.sheet, { paddingBottom: insets.bottom + 16 }]}
+            onPress={() => {}}
           >
-            <Text style={sheetStyles.primaryText}>{primaryLabel}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={sheetStyles.secondaryButton}
-            onPress={onDismiss}
-            activeOpacity={0.85}
-          >
-            <Text style={sheetStyles.secondaryText}>{secondaryLabel}</Text>
-          </TouchableOpacity>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={sheetStyles.handle} />
+              <Text style={sheetStyles.title}>{title}</Text>
+
+              {isAdd ? (
+                <>
+                  {/* Supply Name - editable for new supplies */}
+                  <Text style={sheetStyles.fieldLabel}>
+                    What would you like to call this supply?
+                  </Text>
+                  <TextInput
+                    style={sheetStyles.textInput}
+                    value={nameText}
+                    onChangeText={setNameText}
+                    placeholder={supply.name}
+                    placeholderTextColor={Colors.textLight}
+                    autoCapitalize="words"
+                  />
+
+                  {/* Quantity */}
+                  <Text style={sheetStyles.fieldLabel}>
+                    How many do you have on hand?
+                  </Text>
+                  <View style={sheetStyles.qtyRow}>
+                    <TouchableOpacity
+                      onPress={dec}
+                      style={sheetStyles.stepperButton}
+                      activeOpacity={0.7}
+                      accessibilityLabel="Decrease quantity"
+                    >
+                      <Text style={sheetStyles.stepperButtonText}>−</Text>
+                    </TouchableOpacity>
+                    <TextInput
+                      style={sheetStyles.qtyInput}
+                      value={qtyText}
+                      onChangeText={(v) => setQtyText(v.replace(/[^0-9]/g, ''))}
+                      keyboardType="number-pad"
+                      selectTextOnFocus
+                    />
+                    <TouchableOpacity
+                      onPress={inc}
+                      style={sheetStyles.stepperButton}
+                      activeOpacity={0.7}
+                      accessibilityLabel="Increase quantity"
+                    >
+                      <Text style={sheetStyles.stepperButtonText}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Container Size */}
+                  <Text style={sheetStyles.fieldLabel}>
+                    How many come in a full pack?
+                  </Text>
+                  <TextInput
+                    style={sheetStyles.textInput}
+                    value={containerSizeText}
+                    onChangeText={(v) =>
+                      setContainerSizeText(v.replace(/[^0-9]/g, ''))
+                    }
+                    placeholder={String(supply.containerSize)}
+                    placeholderTextColor={Colors.textLight}
+                    keyboardType="number-pad"
+                  />
+
+                  {/* Unit */}
+                  <Text style={sheetStyles.fieldLabel}>
+                    Unit (e.g. filters, doses, bags)
+                  </Text>
+                  <TextInput
+                    style={sheetStyles.textInput}
+                    value={unitText}
+                    onChangeText={setUnitText}
+                    placeholder={supply.unit}
+                    placeholderTextColor={Colors.textLight}
+                    autoCapitalize="none"
+                  />
+
+                  {/* Purchase URL */}
+                  <Text style={sheetStyles.fieldLabel}>
+                    Where do you buy this? (optional)
+                  </Text>
+                  <TextInput
+                    style={sheetStyles.textInput}
+                    value={amazonUrl}
+                    onChangeText={setAmazonUrl}
+                    placeholder="Paste a link (Amazon, Walmart, etc.)"
+                    placeholderTextColor={Colors.textLight}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    keyboardType="url"
+                  />
+
+                  {/* Reorder Alert Section */}
+                  <Text style={sheetStyles.sectionLabel}>Reorder Alert</Text>
+                  <Text style={sheetStyles.sectionHint}>
+                    Alert me when I'm running low
+                  </Text>
+
+                  {/* Option 1: By Quantity */}
+                  <TouchableOpacity
+                    style={[
+                      sheetStyles.thresholdOption,
+                      thresholdType === 'qty' && sheetStyles.thresholdOptionActive,
+                    ]}
+                    onPress={() => setThresholdType('qty')}
+                    activeOpacity={0.7}
+                  >
+                    <View style={sheetStyles.thresholdRadio}>
+                      {thresholdType === 'qty' ? (
+                        <View style={sheetStyles.thresholdRadioInner} />
+                      ) : null}
+                    </View>
+                    <View style={sheetStyles.thresholdContent}>
+                      <Text style={sheetStyles.thresholdLabel}>
+                        Alert me when I have fewer than
+                      </Text>
+                      <View style={sheetStyles.thresholdInputRow}>
+                        <TextInput
+                          style={sheetStyles.thresholdInput}
+                          value={thresholdQtyText}
+                          onChangeText={(v) =>
+                            setThresholdQtyText(v.replace(/[^0-9]/g, ''))
+                          }
+                          keyboardType="number-pad"
+                          selectTextOnFocus
+                          editable={thresholdType === 'qty'}
+                        />
+                        <Text style={sheetStyles.thresholdUnit}>
+                          {unitText.trim() || supply.unit} left
+                        </Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* Option 2: By Percentage */}
+                  <TouchableOpacity
+                    style={[
+                      sheetStyles.thresholdOption,
+                      thresholdType === 'pct' && sheetStyles.thresholdOptionActive,
+                    ]}
+                    onPress={() => setThresholdType('pct')}
+                    activeOpacity={0.7}
+                  >
+                    <View style={sheetStyles.thresholdRadio}>
+                      {thresholdType === 'pct' ? (
+                        <View style={sheetStyles.thresholdRadioInner} />
+                      ) : null}
+                    </View>
+                    <View style={sheetStyles.thresholdContent}>
+                      <Text style={sheetStyles.thresholdLabel}>
+                        Alert me when I'm below
+                      </Text>
+                      <View style={sheetStyles.thresholdInputRow}>
+                        <TextInput
+                          style={sheetStyles.thresholdInput}
+                          value={thresholdPctText}
+                          onChangeText={(v) =>
+                            setThresholdPctText(v.replace(/[^0-9]/g, ''))
+                          }
+                          keyboardType="number-pad"
+                          selectTextOnFocus
+                          editable={thresholdType === 'pct'}
+                        />
+                        <Text style={sheetStyles.thresholdUnit}>
+                          % of my supply
+                        </Text>
+                      </View>
+                      {thresholdType === 'pct' && safeQty > 0 ? (
+                        <Text style={sheetStyles.thresholdHelper}>
+                          That's when you have fewer than {pctAsQty}{' '}
+                          {unitText.trim() || supply.unit} left
+                        </Text>
+                      ) : null}
+                    </View>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  {/* Supply Name - display only for existing supplies */}
+                  <View style={sheetStyles.displayNameRow}>
+                    <Text style={sheetStyles.displayNameLabel}>Supply:</Text>
+                    <Text style={sheetStyles.displayNameValue}>
+                      {prompt.product.name}
+                    </Text>
+                  </View>
+
+                  {/* Quantity */}
+                  <Text style={sheetStyles.fieldLabel}>
+                    How many do you currently have on hand?
+                  </Text>
+                  <View style={sheetStyles.qtyRow}>
+                    <TouchableOpacity
+                      onPress={dec}
+                      style={sheetStyles.stepperButton}
+                      activeOpacity={0.7}
+                      accessibilityLabel="Decrease quantity"
+                    >
+                      <Text style={sheetStyles.stepperButtonText}>−</Text>
+                    </TouchableOpacity>
+                    <TextInput
+                      style={sheetStyles.qtyInput}
+                      value={qtyText}
+                      onChangeText={(v) => setQtyText(v.replace(/[^0-9]/g, ''))}
+                      keyboardType="number-pad"
+                      selectTextOnFocus
+                    />
+                    <TouchableOpacity
+                      onPress={inc}
+                      style={sheetStyles.stepperButton}
+                      activeOpacity={0.7}
+                      accessibilityLabel="Increase quantity"
+                    >
+                      <Text style={sheetStyles.stepperButtonText}>+</Text>
+                    </TouchableOpacity>
+                    <Text style={sheetStyles.unitLabel}>{unitText}</Text>
+                  </View>
+                </>
+              )}
+
+              <TouchableOpacity
+                style={[
+                  sheetStyles.primaryButton,
+                  !canSubmit && sheetStyles.primaryButtonDisabled,
+                ]}
+                onPress={handlePrimary}
+                activeOpacity={0.85}
+                disabled={!canSubmit}
+              >
+                <Text style={sheetStyles.primaryText}>{primaryLabel}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={sheetStyles.secondaryButton}
+                onPress={onDismiss}
+                activeOpacity={0.85}
+              >
+                <Text style={sheetStyles.secondaryText}>{secondaryLabel}</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </Pressable>
         </Pressable>
-      </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const sheetStyles = StyleSheet.create({
+  keyboardView: {
+    flex: 1,
+  },
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.4)',
@@ -1433,6 +1804,7 @@ const sheetStyles = StyleSheet.create({
     borderTopRightRadius: 20,
     paddingHorizontal: 20,
     paddingTop: 12,
+    maxHeight: '85%',
   },
   handle: {
     alignSelf: 'center',
@@ -1443,25 +1815,56 @@ const sheetStyles = StyleSheet.create({
     marginBottom: 12,
   },
   title: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     color: Colors.textPrimary,
     textAlign: 'center',
-    marginBottom: 6,
+    marginBottom: 16,
   },
-  body: {
+  fieldLabel: {
     fontSize: 14,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+    marginBottom: 8,
+    marginTop: 12,
+  },
+  textInput: {
+    height: 48,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    fontSize: 16,
+    color: Colors.textPrimary,
+    backgroundColor: '#FFFFFF',
+  },
+  displayNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.screenBackground,
+    borderRadius: 10,
+    padding: 14,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  displayNameLabel: {
+    fontSize: 14,
+    fontWeight: '600',
     color: Colors.textMuted,
-    textAlign: 'center',
-    marginBottom: 20,
-    lineHeight: 20,
+    marginRight: 8,
+  },
+  displayNameValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+    flex: 1,
   },
   qtyRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    marginBottom: 20,
+    marginBottom: 8,
   },
   stepperButton: {
     width: 44,
@@ -1469,7 +1872,7 @@ const sheetStyles = StyleSheet.create({
     borderRadius: 22,
     borderWidth: 1,
     borderColor: Colors.border,
-    backgroundColor: Colors.cardBackground,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1480,29 +1883,34 @@ const sheetStyles = StyleSheet.create({
     lineHeight: 26,
   },
   qtyInput: {
-    minWidth: 64,
-    height: 44,
+    minWidth: 80,
+    height: 48,
     paddingHorizontal: 12,
     borderWidth: 1,
     borderColor: Colors.border,
-    borderRadius: 8,
-    fontSize: 18,
+    borderRadius: 10,
+    fontSize: 20,
     fontWeight: '700',
     color: Colors.textPrimary,
-    backgroundColor: Colors.screenBackground,
+    backgroundColor: '#FFFFFF',
     textAlign: 'center',
   },
-  unit: {
+  unitLabel: {
     fontSize: 14,
     fontWeight: '600',
     color: Colors.textSecondary,
+    marginLeft: 4,
   },
   primaryButton: {
     backgroundColor: Colors.primary,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
+    marginTop: 20,
     marginBottom: 8,
+  },
+  primaryButtonDisabled: {
+    opacity: 0.5,
   },
   primaryText: {
     color: '#FFFFFF',
@@ -1518,10 +1926,91 @@ const sheetStyles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
   },
+  sectionLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+    marginTop: 20,
+    marginBottom: 4,
+  },
+  sectionHint: {
+    fontSize: 13,
+    color: Colors.textMuted,
+    marginBottom: 12,
+  },
+  thresholdOption: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.screenBackground,
+    marginBottom: 10,
+  },
+  thresholdOptionActive: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.primaryLight,
+  },
+  thresholdRadio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+    marginTop: 2,
+  },
+  thresholdRadioInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: Colors.primary,
+  },
+  thresholdContent: {
+    flex: 1,
+  },
+  thresholdLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+    marginBottom: 8,
+  },
+  thresholdInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  thresholdInput: {
+    width: 60,
+    height: 40,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+    backgroundColor: '#FFFFFF',
+    textAlign: 'center',
+  },
+  thresholdUnit: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    fontWeight: '500',
+  },
+  thresholdHelper: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    fontStyle: 'italic',
+    marginTop: 8,
+  },
 });
 
-// ----- Step 4 -----
-function Step4({
+// ----- Step 3: Done -----
+function Step3Done({
   mode,
   taskCount,
   supplyCount,
@@ -1693,6 +2182,46 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
   },
   categoryNameOn: {
+    color: Colors.primary,
+  },
+  accordionCard: {
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    overflow: 'hidden',
+  },
+  accordionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    gap: 12,
+  },
+  accordionTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  accordionChevron: {
+    fontSize: 16,
+    color: Colors.textMuted,
+  },
+  accordionContent: {
+    paddingHorizontal: 10,
+    paddingBottom: 10,
+  },
+  selectedBadge: {
+    backgroundColor: Colors.primaryLight,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  selectedBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
     color: Colors.primary,
   },
   groupBlock: {
@@ -1942,5 +2471,69 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 2,
     marginLeft: 14,
+  },
+  customReminderBox: {
+    marginTop: 8,
+    marginLeft: 8,
+    padding: 12,
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  customReminderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  customReminderInput: {
+    width: 60,
+    height: 40,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    fontSize: 16,
+    backgroundColor: Colors.screenBackground,
+    color: Colors.textPrimary,
+    textAlign: 'center',
+  },
+  customUnitRow: {
+    flexDirection: 'row',
+    gap: 6,
+    flex: 1,
+  },
+  customUnitChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.screenBackground,
+  },
+  customUnitChipOn: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.primaryLight,
+  },
+  customUnitText: {
+    fontSize: 13,
+    color: Colors.textMuted,
+    fontWeight: '600',
+  },
+  customUnitTextOn: {
+    color: Colors.primary,
+  },
+  customConfirmButton: {
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: Colors.primary,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  customConfirmText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

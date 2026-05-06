@@ -161,20 +161,21 @@ export default function EditProductScreen() {
           keyboardType="url"
         />
 
-        <Text style={styles.label}>Container size</Text>
+        <Text style={styles.label}>How many come in a full pack/container?</Text>
         <View style={styles.row}>
           <TextInput
             style={[styles.input, styles.sizeInput]}
             value={containerSize}
             onChangeText={setContainerSize}
             keyboardType="decimal-pad"
+            placeholder="4"
             placeholderTextColor={Colors.textLight}
           />
           <TextInput
             style={[styles.input, styles.unitInput]}
             value={containerUnit}
             onChangeText={setContainerUnit}
-            placeholder="oz"
+            placeholder="filters"
             placeholderTextColor={Colors.textLight}
             autoCapitalize="none"
           />

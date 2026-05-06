@@ -1,174 +1,215 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   NativeScrollEvent,
   NativeSyntheticEvent,
   View,
   Text,
-  ScrollView,
+  SectionList,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import { differenceInCalendarDays } from 'date-fns';
+import {
+  differenceInCalendarDays,
+  format,
+  startOfDay,
+  addMonths,
+  isSameMonth,
+  isSameYear,
+} from 'date-fns';
 import { useAppStore } from '../../stores/appStore';
-import { getTasks, resetCompletedToday } from '../../services/taskService';
+import {
+  resetCompletedToday,
+  subscribeToTasks,
+} from '../../services/taskService';
+import {
+  getProducts,
+  getProductUsagesForTask,
+} from '../../services/productService';
 import {
   cancelAllReminders,
   getNotificationPrefs,
   scheduleAllTaskReminders,
 } from '../../services/notificationService';
-import { Task } from '../../types/models';
+import { Product, Task, TaskProductUsage } from '../../types/models';
+import { recurrenceShortLabel } from '../../utils/recurrence';
 import UserAvatar from '../../components/UserAvatar';
 import FAB from '../../components/FAB';
 import TaskTypeSheet from '../../components/TaskTypeSheet';
-import { getFirstName } from '../../utils/nameUtils';
 import { Colors } from '../../constants/colors';
-import { Typography } from '../../constants/typography';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-type Urgency = 'overdue' | 'soon' | 'amber' | 'mid' | 'far' | 'completed';
-
-const URGENCY: Record<Urgency, { color: string; bg: string }> = {
-  overdue: { color: Colors.urgencyRed, bg: Colors.needsAttentionBg },
-  soon: { color: Colors.urgencyOrange, bg: Colors.cardBackground },
-  amber: { color: Colors.urgencyAmber, bg: Colors.cardBackground },
-  mid: { color: Colors.urgencyBlue, bg: Colors.cardBackground },
-  far: { color: Colors.urgencyGray, bg: Colors.cardBackground },
-  completed: { color: Colors.urgencyGreen, bg: '#F0FFF4' },
-};
-
-function urgencyFor(days: number): Exclude<Urgency, 'completed'> {
-  if (days < 0) return 'overdue';
-  if (days <= 1) return 'soon';
-  if (days <= 7) return 'amber';
-  if (days <= 30) return 'mid';
-  return 'far';
+// Types for section list
+interface TimelineTask {
+  task: Task;
+  hasLowStockSupply: boolean;
 }
 
-function dueLabel(days: number): string {
+interface TimelineSection {
+  key: string;
+  title: string;
+  variant: 'attention' | 'week' | 'month' | 'future';
+  data: TimelineTask[];
+}
+
+// Helper to check if a product is low stock
+function isLowStock(product: Product): boolean {
+  const containerSize = product.containerSize || 1;
+  let thresholdQty: number;
+  if (product.lowThresholdQty !== null && product.lowThresholdQty !== undefined) {
+    thresholdQty = product.lowThresholdQty;
+  } else {
+    thresholdQty = (product.lowThresholdPercent / 100) * containerSize;
+  }
+  return product.currentQuantity <= thresholdQty;
+}
+
+// Date chip component
+function DateChip({ days, dueDate }: { days: number; dueDate: Date }) {
+  let label: string;
+  let style: object;
+
   if (days < 0) {
     const overdueBy = Math.abs(days);
-    return `OVERDUE by ${overdueBy} ${overdueBy === 1 ? 'day' : 'days'}`;
+    label = `${overdueBy} ${overdueBy === 1 ? 'day' : 'days'} overdue`;
+    style = styles.chipOverdue;
+  } else if (days === 0) {
+    label = 'Due Today';
+    style = styles.chipToday;
+  } else if (days === 1) {
+    label = 'Tomorrow';
+    style = styles.chipFuture;
+  } else if (days <= 7) {
+    label = `in ${days} days`;
+    style = styles.chipFuture;
+  } else {
+    label = format(dueDate, 'MMM d');
+    style = styles.chipFuture;
   }
-  if (days === 0) return 'Due today';
-  if (days === 1) return 'Due tomorrow';
-  if (days <= 13) return `In ${days} days`;
-  if (days < 60) {
-    const weeks = Math.floor(days / 7);
-    return `In ${weeks} ${weeks === 1 ? 'week' : 'weeks'}`;
-  }
-  const months = Math.floor(days / 30);
-  return `In ${months} ${months === 1 ? 'month' : 'months'}`;
+
+  return (
+    <View style={[styles.chip, style]}>
+      <Text style={[styles.chipText, days < 0 && styles.chipTextOverdue, days === 0 && styles.chipTextToday]}>
+        {label}
+      </Text>
+    </View>
+  );
 }
 
+// Task Card component
 function TaskCard({
-  task,
-  currentUserId,
+  item,
   onPress,
+  isNeedsAttention,
 }: {
-  task: Task;
-  currentUserId: string | null;
+  item: TimelineTask;
   onPress: () => void;
+  isNeedsAttention: boolean;
 }) {
-  const days = differenceInCalendarDays(task.nextDueDate, new Date());
-  const completed = task.completedToday;
-  const palette = completed ? URGENCY.completed : URGENCY[urgencyFor(days)];
-  const label = completed ? '✅ Completed today' : dueLabel(days);
-  const isOverdue = !completed && days < 0;
+  const { task, hasLowStockSupply } = item;
+  const today = startOfDay(new Date());
+  const days = differenceInCalendarDays(task.nextDueDate, today);
+  const isOverdue = days < 0;
+  // In upcoming sections, don't show "completed" styling - we're showing the next occurrence
+  const isCompleted = false;
 
-  const assignedToMe = !!task.assignedTo && task.assignedTo === currentUserId;
-  const assignedToOther = !!task.assignedTo && task.assignedTo !== currentUserId;
+  const borderColor = isOverdue
+    ? Colors.urgencyRed
+    : isNeedsAttention
+      ? Colors.primary
+      : Colors.border;
 
   return (
     <TouchableOpacity
       style={[
         styles.card,
-        { borderLeftColor: palette.color, backgroundColor: palette.bg },
-        completed && styles.cardCompleted,
+        { borderLeftColor: borderColor },
+        isOverdue && styles.cardOverdue,
+        isCompleted && styles.cardCompleted,
       ]}
       onPress={onPress}
       activeOpacity={0.7}
     >
-      {isOverdue ? (
-        <View style={styles.overdueOverlay} pointerEvents="none" />
-      ) : null}
-      <View style={styles.cardDueRow}>
-        <Text style={[styles.dueLabel, { color: palette.color }]}>{label}</Text>
-      </View>
-      <View style={styles.cardBody}>
-        <Text style={styles.taskIcon}>{task.icon ?? '📋'}</Text>
-        <View style={styles.cardBodyText}>
-          <Text
-            style={[
-              styles.taskName,
-              completed && styles.taskNameCompleted,
-            ]}
-          >
-            {task.name}
+      <View style={styles.cardContent}>
+        {/* Icon box */}
+        <View style={[styles.iconBox, isCompleted && styles.iconBoxCompleted]}>
+          <Text style={styles.iconText}>{task.icon ?? '📋'}</Text>
+        </View>
+
+        {/* Main content */}
+        <View style={styles.cardMain}>
+          <View style={styles.cardTopRow}>
+            <View style={styles.taskNameRow}>
+              <Text
+                style={[styles.taskName, isCompleted && styles.taskNameCompleted]}
+                numberOfLines={1}
+              >
+                {task.name}
+              </Text>
+              {hasLowStockSupply && !isCompleted && (
+                <Text style={styles.lowStockIndicator}>🔸</Text>
+              )}
+            </View>
+            {!isCompleted && <DateChip days={days} dueDate={task.nextDueDate} />}
+            {isCompleted && (
+              <View style={[styles.chip, styles.chipCompleted]}>
+                <Text style={styles.chipTextCompleted}>Done</Text>
+              </View>
+            )}
+          </View>
+          <Text style={styles.recurrenceText}>
+            {recurrenceShortLabel(task.recurrence)}
           </Text>
-          {assignedToMe ? (
-            <Text style={styles.assignedToMe}>👤 Assigned to you</Text>
-          ) : assignedToOther ? (
-            <Text style={styles.assignedToOther}>
-              👤 {getFirstName(task.assignedToName ?? task.assignedTo)}
-            </Text>
-          ) : null}
         </View>
       </View>
     </TouchableOpacity>
   );
 }
 
-interface SectionHeaderProps {
-  title: string;
-  count: number;
-  variant: 'attention' | 'soon' | 'later';
-  collapsible: boolean;
-  expanded?: boolean;
-  onToggle?: () => void;
-}
-
-function SectionHeader({
-  title,
-  count,
-  variant,
-  collapsible,
-  expanded,
-  onToggle,
-}: SectionHeaderProps) {
-  const pillBg =
-    variant === 'attention'
-      ? styles.pillAttention
-      : variant === 'soon'
-        ? styles.pillSoon
-        : styles.pillLater;
-
-  const content = (
-    <View style={styles.sectionRow}>
-      <View style={[styles.sectionPill, pillBg]}>
-        <Text style={styles.sectionPillText}>
-          {title}
-          {count > 0 ? ` • ${count}` : ''}
-        </Text>
-      </View>
-      {collapsible ? (
-        <Text style={styles.chevron}>{expanded ? '▼' : '▶'}</Text>
-      ) : null}
-    </View>
-  );
-
-  if (!collapsible) return <View style={styles.sectionWrap}>{content}</View>;
+// Section header component
+function TimelineSectionHeader({ section }: { section: TimelineSection }) {
+  const isAttention = section.variant === 'attention';
 
   return (
-    <TouchableOpacity
-      style={styles.sectionWrap}
-      onPress={onToggle}
-      activeOpacity={0.7}
-    >
-      {content}
-    </TouchableOpacity>
+    <View style={styles.sectionHeader}>
+      <View style={styles.sectionHeaderContent}>
+        {isAttention && <View style={styles.redDot} />}
+        <Text style={styles.sectionHeaderText}>{section.title}</Text>
+      </View>
+      <View style={styles.sectionDivider} />
+    </View>
+  );
+}
+
+// All caught up card
+function AllCaughtUpCard() {
+  return (
+    <View style={styles.caughtUpCard}>
+      <Text style={styles.caughtUpIcon}>✓</Text>
+      <Text style={styles.caughtUpText}>You're all caught up!</Text>
+    </View>
+  );
+}
+
+// Empty state component
+function EmptyState({ onGetStarted }: { onGetStarted: () => void }) {
+  return (
+    <View style={styles.emptyState}>
+      <Text style={styles.emptyEmoji}>📋</Text>
+      <Text style={styles.emptyTitle}>No tasks yet</Text>
+      <Text style={styles.emptySubtext}>
+        Tap + to add your first task or use Suggested Tasks to get started quickly
+      </Text>
+      <TouchableOpacity
+        style={styles.getStartedButton}
+        onPress={onGetStarted}
+        activeOpacity={0.85}
+      >
+        <Text style={styles.getStartedText}>Get Started</Text>
+      </TouchableOpacity>
+    </View>
   );
 }
 
@@ -177,11 +218,10 @@ export default function TimelineScreen() {
   const householdId = useAppStore((s) => s.currentHouseholdId);
   const currentUser = useAppStore((s) => s.currentUser);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [taskUsages, setTaskUsages] = useState<Map<string, TaskProductUsage[]>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showAttention, setShowAttention] = useState(true);
-  const [showSoon, setShowSoon] = useState(false);
-  const [showLater, setShowLater] = useState(false);
   const [filter, setFilter] = useState<'all' | 'mine'>('all');
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -211,27 +251,80 @@ export default function TimelineScreen() {
     }
   };
 
+  // Load products and usages
+  useEffect(() => {
+    if (!householdId) return;
+    let cancelled = false;
+
+    const loadProductData = async () => {
+      try {
+        const prods = await getProducts(householdId);
+        if (cancelled) return;
+        setProducts(prods);
+      } catch (e) {
+        console.warn('[TimelineScreen] getProducts failed:', e);
+      }
+    };
+
+    loadProductData();
+    return () => { cancelled = true; };
+  }, [householdId]);
+
+  // Load task usages when tasks change
+  useEffect(() => {
+    if (!householdId || tasks.length === 0) return;
+    let cancelled = false;
+
+    const loadUsages = async () => {
+      const usageMap = new Map<string, TaskProductUsage[]>();
+      await Promise.all(
+        tasks.map(async (task) => {
+          try {
+            const usages = await getProductUsagesForTask(householdId, task.id);
+            if (!cancelled) {
+              usageMap.set(task.id, usages);
+            }
+          } catch (e) {
+            // Ignore individual failures
+          }
+        })
+      );
+      if (!cancelled) {
+        setTaskUsages(usageMap);
+      }
+    };
+
+    loadUsages();
+    return () => { cancelled = true; };
+  }, [householdId, tasks]);
+
+  // Real-time subscription to tasks
   useFocusEffect(
     useCallback(() => {
       if (!householdId) return;
-      let cancelled = false;
+
       setLoading(true);
       setError(null);
-      resetCompletedToday(householdId)
-        .catch((e) => {
-          console.warn('[TimelineScreen] resetCompletedToday failed:', e);
-        })
-        .then(() => getTasks(householdId))
-        .then(async (result) => {
-          if (cancelled || !result) return;
-          setTasks(result);
+
+      // Reset completed today flags first
+      resetCompletedToday(householdId).catch((e) => {
+        console.warn('[TimelineScreen] resetCompletedToday failed:', e);
+      });
+
+      // Subscribe to real-time updates
+      const unsubscribe = subscribeToTasks(
+        householdId,
+        async (newTasks) => {
+          setTasks(newTasks);
           setLoading(false);
+
+          // Schedule notifications
           if (currentUser?.uid) {
             try {
               const prefs = await getNotificationPrefs(currentUser.uid);
               if (prefs.enabled) {
                 await scheduleAllTaskReminders(
-                  result,
+                  newTasks,
                   householdId,
                   prefs.timing,
                   prefs.reminderHour,
@@ -244,19 +337,18 @@ export default function TimelineScreen() {
               console.warn('[TimelineScreen] schedule reminders failed:', e);
             }
           }
-        })
-        .catch((e) => {
-          if (cancelled) return;
-          const err = e as { code?: string; message?: string };
-          setError(err.message ?? String(e));
+        },
+        (err) => {
+          setError(err.message);
           setLoading(false);
-        });
-      return () => {
-        cancelled = true;
-      };
+        }
+      );
+
+      return unsubscribe;
     }, [householdId, currentUser?.uid])
   );
 
+  // Filter tasks
   const filteredTasks = useMemo(() => {
     if (filter === 'mine' && currentUser?.uid) {
       return tasks.filter((t) => t.assignedTo === currentUser.uid);
@@ -264,33 +356,126 @@ export default function TimelineScreen() {
     return tasks;
   }, [tasks, filter, currentUser?.uid]);
 
-  const buckets = useMemo(() => {
-    const today = new Date();
-    const active: Task[] = [];
-    const completed: Task[] = [];
-    const comingUpSoon: Task[] = [];
-    const comingUpLater: Task[] = [];
-    for (const task of filteredTasks) {
-      if (task.completedToday) {
-        completed.push(task);
-        continue;
+  // Check if task has low stock supply
+  const hasLowStockSupply = useCallback(
+    (taskId: string): boolean => {
+      const usages = taskUsages.get(taskId) || [];
+      for (const usage of usages) {
+        const product = products.find((p) => p.id === usage.productId);
+        if (product && isLowStock(product)) {
+          return true;
+        }
       }
+      return false;
+    },
+    [taskUsages, products]
+  );
+
+  // Build sections
+  const sections = useMemo<TimelineSection[]>(() => {
+    const today = startOfDay(new Date());
+    const result: TimelineSection[] = [];
+
+    // Separate tasks into buckets
+    const needsAttention: TimelineTask[] = [];
+    const thisWeek: TimelineTask[] = [];
+    const thisMonth: TimelineTask[] = [];
+    const futureMonths = new Map<string, TimelineTask[]>();
+
+    // Get date 6 months from now for limiting future tasks
+    const sixMonthsOut = addMonths(today, 6);
+
+    for (const task of filteredTasks) {
+      const item: TimelineTask = {
+        task,
+        hasLowStockSupply: hasLowStockSupply(task.id),
+      };
+
       const days = differenceInCalendarDays(task.nextDueDate, today);
-      if (days <= 7) active.push(task);
-      else if (days <= 30) comingUpSoon.push(task);
-      else comingUpLater.push(task);
+
+      // Completed tasks: don't show in Needs Attention, but do show in upcoming
+      // sections based on their updated nextDueDate (the next occurrence)
+      if (days <= 0 && !task.completedToday) {
+        // Overdue or due today (but not completed)
+        needsAttention.push(item);
+      } else if (days > 0 && days <= 7) {
+        // This week (future)
+        thisWeek.push(item);
+      } else if (days > 7 && days <= 30) {
+        // This month (more than a week away)
+        thisMonth.push(item);
+      } else if (days > 30 && task.nextDueDate <= sixMonthsOut) {
+        // Future months (up to 6 months)
+        const monthKey = format(task.nextDueDate, 'yyyy-MM');
+        if (!futureMonths.has(monthKey)) {
+          futureMonths.set(monthKey, []);
+        }
+        futureMonths.get(monthKey)!.push(item);
+      }
     }
-    active.sort(
-      (a, b) =>
-        differenceInCalendarDays(a.nextDueDate, today) -
-        differenceInCalendarDays(b.nextDueDate, today)
-    );
-    return {
-      needsAttention: [...active, ...completed],
-      comingUpSoon,
-      comingUpLater,
-    };
-  }, [filteredTasks]);
+
+    // Sort needs attention: most overdue first, then today
+    needsAttention.sort((a, b) => {
+      const daysA = differenceInCalendarDays(a.task.nextDueDate, today);
+      const daysB = differenceInCalendarDays(b.task.nextDueDate, today);
+      return daysA - daysB;
+    });
+
+    // Always show Needs Attention section (even if empty for the "all caught up" message)
+    result.push({
+      key: 'attention',
+      title: 'NEEDS ATTENTION',
+      variant: 'attention',
+      data: needsAttention,
+    });
+
+    // This Week (only if has tasks)
+    if (thisWeek.length > 0) {
+      thisWeek.sort((a, b) =>
+        differenceInCalendarDays(a.task.nextDueDate, today) -
+        differenceInCalendarDays(b.task.nextDueDate, today)
+      );
+      result.push({
+        key: 'week',
+        title: 'THIS WEEK',
+        variant: 'week',
+        data: thisWeek,
+      });
+    }
+
+    // This Month (only if has tasks)
+    if (thisMonth.length > 0) {
+      thisMonth.sort((a, b) =>
+        differenceInCalendarDays(a.task.nextDueDate, today) -
+        differenceInCalendarDays(b.task.nextDueDate, today)
+      );
+      result.push({
+        key: 'month',
+        title: 'THIS MONTH',
+        variant: 'month',
+        data: thisMonth,
+      });
+    }
+
+    // Future months
+    const sortedMonthKeys = [...futureMonths.keys()].sort();
+    for (const monthKey of sortedMonthKeys) {
+      const monthTasks = futureMonths.get(monthKey)!;
+      monthTasks.sort((a, b) =>
+        differenceInCalendarDays(a.task.nextDueDate, today) -
+        differenceInCalendarDays(b.task.nextDueDate, today)
+      );
+      const monthLabel = format(new Date(monthKey + '-01'), 'MMMM yyyy').toUpperCase();
+      result.push({
+        key: monthKey,
+        title: monthLabel,
+        variant: 'future',
+        data: monthTasks,
+      });
+    }
+
+    return result;
+  }, [filteredTasks, hasLowStockSupply]);
 
   const Header = (
     <>
@@ -305,13 +490,35 @@ export default function TimelineScreen() {
     </>
   );
 
-  const currentUserId = currentUser?.uid ?? null;
+  const renderSectionHeader = ({ section }: { section: TimelineSection }) => {
+    // Don't render header if it's "needs attention" and empty (we show the caught up card instead)
+    if (section.key === 'attention' && section.data.length === 0) {
+      return null;
+    }
+    return <TimelineSectionHeader section={section} />;
+  };
+
+  const renderItem = ({ item, section }: { item: TimelineTask; section: TimelineSection }) => (
+    <TaskCard
+      item={item}
+      onPress={() => navigation.navigate('TaskDetail', { taskId: item.task.id })}
+      isNeedsAttention={section.variant === 'attention'}
+    />
+  );
+
+  const renderSectionFooter = ({ section }: { section: TimelineSection }) => {
+    // Show "all caught up" only for empty needs attention section
+    if (section.key === 'attention' && section.data.length === 0) {
+      return <AllCaughtUpCard />;
+    }
+    return null;
+  };
 
   let body: React.ReactNode;
   if (loading) {
     body = (
       <View style={styles.center}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={Colors.primary} />
       </View>
     );
   } else if (error) {
@@ -321,142 +528,58 @@ export default function TimelineScreen() {
       </View>
     );
   } else if (tasks.length === 0) {
-    body = (
-      <View style={styles.emptyState}>
-        <Text style={styles.emptyEmoji}>📋</Text>
-        <Text style={styles.emptyTitle}>No tasks yet</Text>
-        <Text style={styles.emptySubtext}>
-          Get started by adding your first task
-        </Text>
-        <TouchableOpacity
-          style={styles.emptyPrimaryButton}
-          onPress={() => setSheetOpen(true)}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.emptyPrimaryText}>＋ Add a Task</Text>
-        </TouchableOpacity>
-      </View>
-    );
+    body = <EmptyState onGetStarted={openSuggested} />;
   } else {
     body = (
-      <ScrollView
+      <SectionList
+        sections={sections}
+        keyExtractor={(item) => item.task.id}
+        renderItem={renderItem}
+        renderSectionHeader={renderSectionHeader}
+        renderSectionFooter={renderSectionFooter}
         contentContainerStyle={styles.listContent}
         onScroll={handleScroll}
         scrollEventThrottle={16}
-      >
-        <View style={styles.filterRow}>
-          <TouchableOpacity
-            style={[
-              styles.filterPill,
-              filter === 'all' && styles.filterPillActive,
-            ]}
-            onPress={() => setFilter('all')}
-            activeOpacity={0.7}
-          >
-            <Text
+        stickySectionHeadersEnabled={false}
+        ListHeaderComponent={
+          <View style={styles.filterRow}>
+            <TouchableOpacity
               style={[
-                styles.filterPillText,
-                filter === 'all' && styles.filterPillTextActive,
+                styles.filterPill,
+                filter === 'all' && styles.filterPillActive,
               ]}
+              onPress={() => setFilter('all')}
+              activeOpacity={0.7}
             >
-              All Tasks
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.filterPill,
-              filter === 'mine' && styles.filterPillActive,
-            ]}
-            onPress={() => setFilter('mine')}
-            activeOpacity={0.7}
-          >
-            <Text
-              style={[
-                styles.filterPillText,
-                filter === 'mine' && styles.filterPillTextActive,
-              ]}
-            >
-              Assigned to me
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <SectionHeader
-          title="NEEDS ATTENTION"
-          count={buckets.needsAttention.length}
-          variant="attention"
-          collapsible
-          expanded={showAttention}
-          onToggle={() => setShowAttention((s) => !s)}
-        />
-        {showAttention &&
-          (buckets.needsAttention.length === 0 ? (
-            <View style={styles.emptyAttention}>
-              <Text style={styles.emptyAttentionText}>
-                🎉 You're all caught up!
+              <Text
+                style={[
+                  styles.filterPillText,
+                  filter === 'all' && styles.filterPillTextActive,
+                ]}
+              >
+                All Tasks
               </Text>
-            </View>
-          ) : (
-            buckets.needsAttention.map((t) => (
-              <TaskCard
-                key={t.id}
-                task={t}
-                currentUserId={currentUserId}
-                onPress={() =>
-                  navigation.navigate('TaskDetail', { taskId: t.id })
-                }
-              />
-            ))
-          ))}
-
-        {buckets.comingUpSoon.length > 0 && (
-          <>
-            <SectionHeader
-              title="COMING UP SOON"
-              count={buckets.comingUpSoon.length}
-              variant="soon"
-              collapsible
-              expanded={showSoon}
-              onToggle={() => setShowSoon((s) => !s)}
-            />
-            {showSoon &&
-              buckets.comingUpSoon.map((t) => (
-                <TaskCard
-                  key={t.id}
-                  task={t}
-                  currentUserId={currentUserId}
-                  onPress={() =>
-                    navigation.navigate('TaskDetail', { taskId: t.id })
-                  }
-                />
-              ))}
-          </>
-        )}
-
-        {buckets.comingUpLater.length > 0 && (
-          <>
-            <SectionHeader
-              title="COMING UP LATER"
-              count={buckets.comingUpLater.length}
-              variant="later"
-              collapsible
-              expanded={showLater}
-              onToggle={() => setShowLater((s) => !s)}
-            />
-            {showLater &&
-              buckets.comingUpLater.map((t) => (
-                <TaskCard
-                  key={t.id}
-                  task={t}
-                  currentUserId={currentUserId}
-                  onPress={() =>
-                    navigation.navigate('TaskDetail', { taskId: t.id })
-                  }
-                />
-              ))}
-          </>
-        )}
-      </ScrollView>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.filterPill,
+                filter === 'mine' && styles.filterPillActive,
+              ]}
+              onPress={() => setFilter('mine')}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[
+                  styles.filterPillText,
+                  filter === 'mine' && styles.filterPillTextActive,
+                ]}
+              >
+                Assigned to me
+              </Text>
+            </TouchableOpacity>
+          </View>
+        }
+      />
     );
   }
 
@@ -478,7 +601,6 @@ export default function TimelineScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    position: 'relative',
     backgroundColor: Colors.screenBackground,
   },
   safeTop: {
@@ -489,7 +611,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop: 0,
     backgroundColor: Colors.headerBackground,
   },
   headerSide: {
@@ -499,11 +620,10 @@ const styles = StyleSheet.create({
   },
   headerSideRight: {
     justifyContent: 'flex-end',
-    gap: 8,
   },
   title: {
     flex: 1,
-    color: '#FFFFFF',
+    color: Colors.textOnDark,
     fontSize: 20,
     fontWeight: '700',
     textAlign: 'center',
@@ -514,45 +634,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 24,
   },
-  emptyState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-    paddingBottom: 100,
-  },
-  emptyEmoji: {
-    fontSize: 64,
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  emptySubtext: {
-    fontSize: 15,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: 24,
-    paddingHorizontal: 16,
-  },
-  emptyPrimaryButton: {
-    alignSelf: 'stretch',
-    backgroundColor: Colors.primary,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  emptyPrimaryText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
   errorText: {
     color: Colors.error,
     fontSize: 14,
@@ -562,120 +643,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 100,
   },
-  sectionWrap: {
-    marginTop: 20,
-    marginBottom: 8,
-  },
-  sectionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  sectionPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 20,
-  },
-  sectionPillText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    letterSpacing: 1,
-  },
-  pillAttention: {
-    backgroundColor: Colors.urgencyRed,
-  },
-  pillSoon: {
-    backgroundColor: Colors.primary,
-  },
-  pillLater: {
-    backgroundColor: Colors.textMuted,
-  },
-  chevron: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: Colors.textMuted,
-  },
-  emptyAttention: {
-    paddingVertical: 24,
-    alignItems: 'center',
-  },
-  emptyAttentionText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: Colors.urgencyGreen,
-  },
-  card: {
-    borderRadius: 16,
-    borderLeftWidth: 4,
-    padding: 14,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
-    overflow: 'hidden',
-  },
-  cardCompleted: {
-    opacity: 0.7,
-  },
-  overdueOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(229,62,62,0.03)',
-  },
-  cardDueRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  calendarIcon: {
-    fontSize: 14,
-    marginRight: 6,
-  },
-  dueLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-  },
-  cardBody: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  taskIcon: {
-    fontSize: 28,
-    marginRight: 12,
-  },
-  cardBodyText: {
-    flex: 1,
-  },
-  taskName: {
-    ...Typography.bodyBold,
-    color: Colors.textPrimary,
-    marginBottom: 2,
-  },
-  taskNameCompleted: {
-    textDecorationLine: 'line-through',
-  },
-  taskMeta: {
-    fontSize: 13,
-    color: Colors.textMuted,
-  },
-  assignedToMe: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: Colors.primary,
-    marginTop: 4,
-  },
-  assignedToOther: {
-    fontSize: 12,
-    color: Colors.textMuted,
-    marginTop: 4,
-  },
   filterRow: {
     flexDirection: 'row',
     gap: 8,
     paddingTop: 12,
+    paddingBottom: 8,
   },
   filterPill: {
     paddingHorizontal: 14,
@@ -696,5 +668,197 @@ const styles = StyleSheet.create({
   },
   filterPillTextActive: {
     color: Colors.primary,
+  },
+  // Section header styles
+  sectionHeader: {
+    marginTop: 20,
+    marginBottom: 12,
+  },
+  sectionHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  sectionHeaderText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.textMuted,
+    letterSpacing: 1.2,
+  },
+  redDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.urgencyRed,
+    marginRight: 8,
+  },
+  sectionDivider: {
+    height: 1,
+    backgroundColor: Colors.border,
+  },
+  // Card styles
+  card: {
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    padding: 12,
+    marginBottom: 10,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  cardOverdue: {
+    backgroundColor: Colors.needsAttentionBg,
+  },
+  cardCompleted: {
+    opacity: 0.7,
+  },
+  cardContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  iconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: Colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  iconBoxCompleted: {
+    backgroundColor: Colors.successBg,
+  },
+  iconText: {
+    fontSize: 20,
+  },
+  cardMain: {
+    flex: 1,
+  },
+  cardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  taskNameRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  taskName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+    flexShrink: 1,
+  },
+  taskNameCompleted: {
+    textDecorationLine: 'line-through',
+    color: Colors.textMuted,
+  },
+  lowStockIndicator: {
+    fontSize: 12,
+    marginLeft: 4,
+  },
+  recurrenceText: {
+    fontSize: 12,
+    color: Colors.textMuted,
+  },
+  // Chip styles
+  chip: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  chipOverdue: {
+    backgroundColor: Colors.urgencyRed,
+  },
+  chipToday: {
+    backgroundColor: Colors.urgencyOrange,
+  },
+  chipFuture: {
+    backgroundColor: Colors.border,
+  },
+  chipCompleted: {
+    backgroundColor: Colors.successBg,
+  },
+  chipText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+  },
+  chipTextOverdue: {
+    color: Colors.textOnDark,
+  },
+  chipTextToday: {
+    color: Colors.textOnDark,
+  },
+  chipTextCompleted: {
+    color: Colors.successText,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  // Caught up card
+  caughtUpCard: {
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 12,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+    marginBottom: 12,
+  },
+  caughtUpIcon: {
+    fontSize: 32,
+    color: Colors.primary,
+    marginBottom: 8,
+  },
+  caughtUpText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.urgencyGreen,
+  },
+  // Empty state
+  emptyState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    paddingBottom: 100,
+  },
+  emptyEmoji: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptySubtext: {
+    fontSize: 15,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  getStartedButton: {
+    backgroundColor: Colors.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+  },
+  getStartedText: {
+    color: Colors.textOnDark,
+    fontSize: 16,
+    fontWeight: '700',
   },
 });

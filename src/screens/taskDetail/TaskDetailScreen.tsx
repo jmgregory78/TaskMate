@@ -21,7 +21,6 @@ import { useAppStore } from '../../stores/appStore';
 import {
   assignTask,
   completeTask,
-  deleteTask,
   getActivityLog,
   getTask,
   getTasks,
@@ -54,7 +53,6 @@ import {
   AssigneePickerSheet,
 } from '../../components/AssigneeSelector';
 import { reminderLabel } from '../../components/ReminderPicker';
-import DeleteRowButton from '../../components/DeleteRowButton';
 import SnoozeSheet, { SnoozeUnit } from '../../components/SnoozeSheet';
 import PurchaseLinkSheet from '../../components/PurchaseLinkSheet';
 import { openPurchaseUrl } from '../../utils/purchaseLink';
@@ -433,32 +431,6 @@ export default function TaskDetailScreen() {
     }
   };
 
-  const handleDelete = () => {
-    if (!task || !householdId || actionPending) return;
-    Alert.alert(
-      `Delete ${task.name}?`,
-      'This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            setActionPending(true);
-            try {
-              await deleteTask(householdId, taskId);
-              navigation.goBack();
-            } catch (e) {
-              const err = e as { message?: string };
-              Alert.alert('Error', err.message ?? 'Failed to delete task');
-              setActionPending(false);
-            }
-          },
-        },
-      ]
-    );
-  };
-
   if (loading) {
     return (
       <View style={styles.center}>
@@ -787,13 +759,6 @@ export default function TaskDetailScreen() {
         )}
       </View>
 
-      <View style={styles.deleteWrap}>
-        <DeleteRowButton
-          label="Delete from Task List"
-          onPress={handleDelete}
-          disabled={actionPending}
-        />
-      </View>
       </ScrollView>
       <CompleteTaskSheet
         visible={sheetVisible}
@@ -868,9 +833,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
-  },
-  deleteWrap: {
-    paddingHorizontal: 16,
   },
   reminderBanner: {
     backgroundColor: '#2D3748',

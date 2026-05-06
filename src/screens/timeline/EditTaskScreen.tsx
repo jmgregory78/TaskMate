@@ -25,6 +25,7 @@ import DateTimePicker, {
 import { useAuth } from '../../hooks/useAuth';
 import {
   assignTask,
+  deleteTask,
   getTask,
   logActivity,
   updateTask,
@@ -42,6 +43,7 @@ import AssigneeSelector, {
 } from '../../components/AssigneeSelector';
 import ScreenHeader from '../../components/ScreenHeader';
 import ReminderPicker from '../../components/ReminderPicker';
+import DeleteRowButton from '../../components/DeleteRowButton';
 import { sendAssignmentNotification } from '../../services/notificationService';
 import { getFirstName } from '../../utils/nameUtils';
 import { Colors } from '../../constants/colors';
@@ -136,6 +138,7 @@ export default function EditTaskScreen() {
   const [reminderDaysBefore, setReminderDaysBefore] = useState<number | null>(1);
 
   const [submitting, setSubmitting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -342,6 +345,31 @@ export default function EditTaskScreen() {
     }
   };
 
+  const handleDelete = () => {
+    if (!task || deleting) return;
+    Alert.alert(
+      'Delete Task?',
+      'This will permanently delete this task and cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              await deleteTask(householdId, taskId);
+              navigation.goBack();
+            } catch (e) {
+              const err = e as { message?: string };
+              Alert.alert('Error', err.message ?? 'Failed to delete task');
+              setDeleting(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   if (loading) {
     return (
@@ -648,6 +676,12 @@ export default function EditTaskScreen() {
             />
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
+
+            <DeleteRowButton
+              label="Delete Task"
+              onPress={handleDelete}
+              disabled={deleting || submitting}
+            />
           </ScrollView>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>

@@ -26,7 +26,10 @@ type CreateProductInput = Omit<
   | 'purchasePendingAt'
   | 'lastPurchasedAt'
   | 'lastPurchasePrice'
->;
+  | 'lowThresholdQty'
+> & {
+  lowThresholdQty?: number | null;
+};
 
 function productsCollection(householdId: string) {
   return collection(db, 'households', householdId, 'products');
@@ -112,6 +115,8 @@ function mapProductDoc(
     containerUnit: data.containerUnit ?? '',
     currentQuantity: Number(data.currentQuantity) || 0,
     lowThresholdPercent: Number(data.lowThresholdPercent ?? 25),
+    lowThresholdQty:
+      typeof data.lowThresholdQty === 'number' ? data.lowThresholdQty : null,
     lastPurchasedAt: toDateOrNull(data.lastPurchasedAt),
     lastPurchasePrice:
       typeof data.lastPurchasePrice === 'number'
@@ -148,6 +153,7 @@ export async function createProduct(
     containerUnit: data.containerUnit,
     currentQuantity: data.currentQuantity,
     lowThresholdPercent: data.lowThresholdPercent,
+    lowThresholdQty: data.lowThresholdQty ?? null,
     lastPurchasedAt: null,
     lastPurchasePrice: null,
     purchasePending: false,
@@ -310,7 +316,8 @@ export async function confirmPurchase(
   const data = snap.data();
   const containerSize = Number(data.containerSize) || 0;
   const containerUnit = String(data.containerUnit ?? '');
-  const totalAdded = quantity * containerSize;
+  // quantity is already the number of units (not packs), so add it directly
+  const totalAdded = quantity;
 
   await updateDoc(productRef, {
     currentQuantity: increment(totalAdded),

@@ -50,7 +50,7 @@ export default function LogPurchaseScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const [priceText, setPriceText] = useState('');
-  const [quantityText, setQuantityText] = useState('1');
+  const [quantityText, setQuantityText] = useState('');
   const [purchasedAt, setPurchasedAt] = useState<Date>(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -66,6 +66,7 @@ export default function LogPurchaseScreen() {
         } else {
           setProduct(p);
           setPriceText(p.lastPurchasePrice ? String(p.lastPurchasePrice) : '');
+          setQuantityText(String(p.containerSize || 1));
         }
         setLoading(false);
       })
@@ -85,7 +86,7 @@ export default function LogPurchaseScreen() {
     const qty = Math.max(0, parseNumber(quantityText, 0));
     return {
       ...product,
-      currentQuantity: product.currentQuantity + qty * product.containerSize,
+      currentQuantity: product.currentQuantity + qty,
     };
   }, [product, quantityText]);
 
@@ -175,13 +176,19 @@ export default function LogPurchaseScreen() {
       />
 
       <Text style={styles.label}>
-        Quantity purchased{product.containerUnit ? ` (${product.containerUnit})` : ''}
+        How many {product.containerUnit || 'units'} did you buy?
+      </Text>
+      <Text style={styles.helperText}>
+        Enter the number of {product.containerUnit || 'units'}, not packs.
+        {product.containerSize > 0 && ` A full pack contains ${product.containerSize} ${product.containerUnit || 'units'}.`}
       </Text>
       <TextInput
         style={styles.input}
         value={quantityText}
         onChangeText={setQuantityText}
         keyboardType="number-pad"
+        placeholder={String(product.containerSize || 1)}
+        placeholderTextColor={Colors.textLight}
       />
 
       <Text style={styles.label}>Date</Text>
@@ -223,6 +230,13 @@ export default function LogPurchaseScreen() {
         New level: {newPercent}% · {previewProduct.currentQuantity}{' '}
         {previewProduct.containerUnit} on hand
       </Text>
+
+      <View style={styles.confirmationBox}>
+        <Text style={styles.confirmationText}>
+          Adding {Math.max(0, parseNumber(quantityText, 0))} {product.containerUnit || 'units'} — your new total will be{' '}
+          {previewProduct.currentQuantity} {product.containerUnit || 'units'}
+        </Text>
+      </View>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -292,7 +306,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.textSecondary,
     marginTop: 20,
+    marginBottom: 4,
+  },
+  helperText: {
+    fontSize: 12,
+    color: Colors.textMuted,
     marginBottom: 8,
+    lineHeight: 16,
   },
   input: {
     height: 48,
@@ -359,6 +379,18 @@ const styles = StyleSheet.create({
     color: Colors.urgencyGreen,
     fontWeight: '600',
     marginTop: 12,
+  },
+  confirmationBox: {
+    backgroundColor: Colors.primaryLight,
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 16,
+  },
+  confirmationText: {
+    fontSize: 14,
+    color: Colors.primary,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   button: {
     height: 48,

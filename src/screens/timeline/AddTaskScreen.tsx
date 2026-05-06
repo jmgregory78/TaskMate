@@ -295,7 +295,8 @@ export default function AddTaskScreen() {
           sel.product.containerUnit
         );
       }
-      navigation.goBack();
+      // Navigate back to Timeline (Tasks tab) regardless of navigation stack
+      navigation.navigate('Main', { screen: 'Tasks' });
     } catch (e) {
       const err = e as { code?: string; message?: string };
       const message = err.code
@@ -306,9 +307,13 @@ export default function AddTaskScreen() {
     }
   };
 
+  const handleBack = () => {
+    navigation.navigate('Main', { screen: 'Tasks' });
+  };
+
   return (
     <>
-      <ScreenHeader title="New Task" leftLabel="Back" />
+      <ScreenHeader title="New Task" leftLabel="Back" onLeftPress={handleBack} />
       <ScreenWrapper contentContainerStyle={styles.content}>
         <TouchableOpacity
           style={styles.suggestedShortcut}
@@ -320,14 +325,15 @@ export default function AddTaskScreen() {
           </Text>
         </TouchableOpacity>
         <Text style={styles.label}>Task name</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. Replace AC filter"
-        placeholderTextColor={Colors.textLight}
-        value={name}
-        onChangeText={setName}
-        autoCapitalize="sentences"
-      />
+        <TextInput
+          style={styles.input}
+          placeholder="Enter task name"
+          placeholderTextColor={Colors.textLight}
+          value={name}
+          onChangeText={setName}
+          autoCapitalize="sentences"
+          autoFocus
+        />
 
       <Text style={styles.label}>Description (optional)</Text>
       <TextInput

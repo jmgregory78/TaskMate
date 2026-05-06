@@ -1,13 +1,10 @@
 import { ReactNode } from 'react';
 import {
-  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleProp,
   StyleSheet,
-  TouchableWithoutFeedback,
-  View,
   ViewStyle,
 } from 'react-native';
 import { Colors } from '../constants/colors';
@@ -28,15 +25,14 @@ export default function ScreenWrapper({
       style={[styles.flex, style]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-        <ScrollView
-          style={styles.flex}
-          contentContainerStyle={[styles.content, contentContainerStyle]}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={styles.flex}>{children}</View>
-        </ScrollView>
-      </TouchableWithoutFeedback>
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={[styles.content, contentContainerStyle]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
+        {children}
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }

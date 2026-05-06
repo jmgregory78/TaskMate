@@ -16,6 +16,10 @@ export interface NotificationPrefs {
   snoozeDuration: SnoozeDuration;
   reminderHour: number;
   reminderMinute: number;
+  taskDueAlertsEnabled: boolean;
+  quietHoursEnabled: boolean;
+  quietHoursStart: number; // hour 0-23
+  quietHoursEnd: number; // hour 0-23
 }
 
 const DEFAULT_PREFS: NotificationPrefs = {
@@ -24,6 +28,10 @@ const DEFAULT_PREFS: NotificationPrefs = {
   snoozeDuration: '1day',
   reminderHour: 9,
   reminderMinute: 0,
+  taskDueAlertsEnabled: true,
+  quietHoursEnabled: false,
+  quietHoursStart: 22, // 10 PM
+  quietHoursEnd: 8, // 8 AM
 };
 
 export function computeSnoozeTriggerDate(duration: SnoozeDuration): Date {
@@ -275,6 +283,22 @@ export async function getNotificationPrefs(
         typeof data?.reminderMinute === 'number'
           ? data.reminderMinute
           : DEFAULT_PREFS.reminderMinute,
+      taskDueAlertsEnabled:
+        typeof data?.taskDueAlertsEnabled === 'boolean'
+          ? data.taskDueAlertsEnabled
+          : DEFAULT_PREFS.taskDueAlertsEnabled,
+      quietHoursEnabled:
+        typeof data?.quietHoursEnabled === 'boolean'
+          ? data.quietHoursEnabled
+          : DEFAULT_PREFS.quietHoursEnabled,
+      quietHoursStart:
+        typeof data?.quietHoursStart === 'number'
+          ? data.quietHoursStart
+          : DEFAULT_PREFS.quietHoursStart,
+      quietHoursEnd:
+        typeof data?.quietHoursEnd === 'number'
+          ? data.quietHoursEnd
+          : DEFAULT_PREFS.quietHoursEnd,
     };
   } catch (e) {
     console.warn('[notifications] getPrefs failed:', e);
@@ -292,5 +316,9 @@ export async function setNotificationPrefs(
     snoozeDuration: prefs.snoozeDuration,
     reminderHour: prefs.reminderHour,
     reminderMinute: prefs.reminderMinute,
+    taskDueAlertsEnabled: prefs.taskDueAlertsEnabled,
+    quietHoursEnabled: prefs.quietHoursEnabled,
+    quietHoursStart: prefs.quietHoursStart,
+    quietHoursEnd: prefs.quietHoursEnd,
   });
 }

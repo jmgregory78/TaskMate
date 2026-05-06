@@ -6,12 +6,14 @@ import {
   getDoc,
   getDocs,
   limit as fbLimit,
+  onSnapshot,
   orderBy,
   query,
   serverTimestamp,
   Timestamp,
   updateDoc,
   where,
+  Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { computeNextDueDate } from '../utils/recurrence';
@@ -23,6 +25,10 @@ import {
 } from '../types/models';
 import { getFirstName } from '../utils/nameUtils';
 import { suggestTaskIcon } from './iconService';
+import {
+  deductProductUsage,
+  getProductUsagesForTask,
+} from './productService';
 
 type CreateTaskInput = Omit<
   Task,
@@ -336,6 +342,19 @@ export async function completeTask(
     nextDueDate: Timestamp.fromDate(nextDueDate),
   });
   await logActivity(householdId, taskId, 'completed', userId, note);
+
+  // Deduct linked product usage when task is completed
+  try {
+    const usages = await getProductUsagesForTask(householdId, taskId);
+    await Promise.all(
+      usages.map((usage) =>
+        deductProductUsage(householdId, usage.productId, usage.usageAmount)
+      )
+    );
+  } catch (e) {
+    console.warn('[completeTask] Failed to deduct product usage:', e);
+  }
+
   return nextDueDate;
 }
 
@@ -373,4 +392,30 @@ export async function deleteTask(
   await Promise.all(activitySnap.docs.map((d) => deleteDoc(d.ref)));
 
   await deleteDoc(doc(db, 'households', householdId, 'tasks', taskId));
+}
+
+/**
+ * Subscribe to real-time task updates for a household.
+ * Returns an unsubscribe function to stop listening.
+ */
+export function subscribeToTasks(
+  householdId: string,
+  onTasks: (tasks: Task[]) => void,
+  onError?: (error: Error) => void
+): Unsubscribe {
+  const q = query(
+    tasksCollection(householdId),
+    orderBy('nextDueDate', 'asc')
+  );
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const tasks = snapshot.docs.map((d) => mapTaskDoc(d.id, d.data()));
+      onTasks(tasks);
+    },
+    (error) => {
+      console.error('[subscribeToTasks] Error:', error);
+      onError?.(error);
+    }
+  );
 }

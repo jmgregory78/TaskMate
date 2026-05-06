@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
-import { Product, stockPercent } from '../types/models';
+import { Product } from '../types/models';
 import { Colors } from '../constants/colors';
 
 interface Props {
@@ -9,9 +9,46 @@ interface Props {
   compact?: boolean;
 }
 
-function colorForPercent(percent: number): string {
-  if (percent < 25) return Colors.urgencyRed;
-  if (percent <= 50) return Colors.urgencyAmber;
+function calculatePercent(product: Product): number {
+  // Use containerSize as the max (100% when full)
+  // If containerSize is not set or 0, show 100% (full green)
+  if (!product.containerSize || product.containerSize <= 0) {
+    return 100;
+  }
+  // Cap at 100% - never show more than full
+  return Math.min(
+    100,
+    Math.round((product.currentQuantity / product.containerSize) * 100)
+  );
+}
+
+function colorForStock(product: Product, percent: number): string {
+  const containerSize = product.containerSize || 1;
+
+  // Determine effective threshold quantity
+  let thresholdQty: number;
+  if (
+    product.lowThresholdQty !== null &&
+    product.lowThresholdQty !== undefined
+  ) {
+    thresholdQty = product.lowThresholdQty;
+  } else {
+    // Convert percentage threshold to quantity
+    thresholdQty = (product.lowThresholdPercent / 100) * containerSize;
+  }
+
+  // Red: critically low - 1 unit remaining or below 10%, whichever is higher
+  const criticalQty = Math.max(1, containerSize * 0.1);
+  if (product.currentQuantity <= criticalQty) {
+    return Colors.urgencyRed;
+  }
+
+  // Yellow: at or below reorder threshold
+  if (product.currentQuantity <= thresholdQty) {
+    return Colors.urgencyAmber;
+  }
+
+  // Green: above reorder threshold
   return Colors.urgencyGreen;
 }
 
@@ -20,7 +57,7 @@ export default function InventoryBar({
   showLabel = true,
   compact = false,
 }: Props) {
-  const percent = stockPercent(product);
+  const percent = calculatePercent(product);
   const animated = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -46,7 +83,7 @@ export default function InventoryBar({
             styles.fill,
             {
               width: widthInterpolated,
-              backgroundColor: colorForPercent(percent),
+              backgroundColor: colorForStock(product, percent),
             },
           ]}
         />

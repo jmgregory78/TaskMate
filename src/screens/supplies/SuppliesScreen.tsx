@@ -51,6 +51,7 @@ interface SupplyRow {
   estimatedRunOutDate: Date | null;
   reorderByDate: Date | null;
   isRedZone: boolean;
+  unitAction: string;
 }
 
 function recurrenceToDays(task: Task): number {
@@ -158,6 +159,21 @@ export default function SuppliesScreen() {
               percent <= product.lowThresholdPercent ||
               (reorderByDate !== null &&
                 reorderByDate.getTime() <= today.getTime());
+
+            // Derive unit action from linked task name
+            let unitAction = 'remaining';
+            if (usages.length > 0) {
+              const taskName = usages[0].task.name.toLowerCase();
+              if (taskName.includes('replacement') || taskName.includes('replace')) unitAction = 'replacements';
+              else if (taskName.includes('treatment') || taskName.includes('treat')) unitAction = 'treatments';
+              else if (taskName.includes('dose') || taskName.includes('medication') || taskName.includes('prescription')) unitAction = 'doses';
+              else if (taskName.includes('application') || taskName.includes('apply')) unitAction = 'applications';
+              else if (taskName.includes('cleaning') || taskName.includes('clean')) unitAction = 'cleanings';
+              else if (taskName.includes('change')) unitAction = 'changes';
+              else if (taskName.includes('filter')) unitAction = 'replacements';
+              else unitAction = 'remaining';
+            }
+
             return {
               product,
               usages,
@@ -166,6 +182,7 @@ export default function SuppliesScreen() {
               estimatedRunOutDate,
               reorderByDate,
               isRedZone,
+              unitAction,
             };
           });
 
@@ -522,8 +539,9 @@ function SupplyCard({ row, onTap, onBuy, onMenu }: SupplyCardProps) {
         <InventoryBar product={row.product} showLabel={false} compact />
       </View>
       <Text style={styles.cardMeta}>
-        {row.applicationsRemaining}{' '}
-        {row.applicationsRemaining === 1 ? 'use' : 'uses'} left
+        {row.usages.length > 0
+          ? `${row.product.currentQuantity} ${row.unitAction} remaining`
+          : `${row.product.currentQuantity} ${row.product.containerUnit} on hand`}
         {row.estimatedRunOutDate
           ? ` · runs out ~${format(row.estimatedRunOutDate, 'MMM yyyy')}`
           : ''}

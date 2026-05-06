@@ -122,6 +122,7 @@ export interface Product {
   containerUnit: string;
   currentQuantity: number;
   lowThresholdPercent: number;
+  lowThresholdQty: number | null;
   lastPurchasedAt: Date | null;
   lastPurchasePrice: number | null;
   purchasePending: boolean;

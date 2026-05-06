@@ -28,7 +28,6 @@ import { getTasks } from '../../services/taskService';
 import {
   Product,
   PurchaseLog,
-  stockPercent,
   Task,
   TaskProductUsage,
 } from '../../types/models';
@@ -241,15 +240,53 @@ export default function ProductDetailScreen() {
   const applicationsRemaining =
     avgPerApp > 0 ? Math.floor(product.currentQuantity / avgPerApp) : 0;
 
+  // Derive unit action from linked task name (e.g., "HVAC Filter Replacement" -> "replacements")
+  const deriveUnitAction = (): string => {
+    if (usageRefs.length === 0) return '';
+    const taskName = usageRefs[0].task.name.toLowerCase();
+    if (taskName.includes('replacement') || taskName.includes('replace')) return 'replacements';
+    if (taskName.includes('treatment') || taskName.includes('treat')) return 'treatments';
+    if (taskName.includes('dose') || taskName.includes('medication') || taskName.includes('prescription')) return 'doses';
+    if (taskName.includes('application') || taskName.includes('apply')) return 'applications';
+    if (taskName.includes('cleaning') || taskName.includes('clean')) return 'cleanings';
+    if (taskName.includes('change')) return 'changes';
+    if (taskName.includes('filter')) return 'replacements';
+    return 'uses';
+  };
+  const unitAction = deriveUnitAction();
+
   let runOutDate: Date | null = null;
   let reorderByDate: Date | null = null;
   if (totalUsagePerDay > 0) {
     runOutDate = addDays(today, product.currentQuantity / totalUsagePerDay);
     reorderByDate = addDays(runOutDate, -14);
   }
-  const percent = stockPercent(product);
+
+  // Calculate percent for display (uses containerSize as 100%)
+  const containerSize = product.containerSize || 1;
+  const percent =
+    containerSize > 0
+      ? Math.min(100, Math.round((product.currentQuantity / containerSize) * 100))
+      : 100;
+
+  // Determine if we're in the "red zone" using either quantity or percentage threshold
+  let thresholdQty: number;
+  if (
+    product.lowThresholdQty !== null &&
+    product.lowThresholdQty !== undefined
+  ) {
+    thresholdQty = product.lowThresholdQty;
+  } else {
+    thresholdQty = (product.lowThresholdPercent / 100) * containerSize;
+  }
+  const isLowStock = product.currentQuantity <= thresholdQty;
+
+  // Red zone: critically low (1 unit remaining or below 10%, whichever is higher) OR past reorder date
+  const criticalQty = Math.max(1, containerSize * 0.1);
+  const isCriticallyLow = product.currentQuantity <= criticalQty;
   const inRedZone =
-    percent <= product.lowThresholdPercent ||
+    isCriticallyLow ||
+    isLowStock ||
     (reorderByDate !== null &&
       reorderByDate.getTime() <= today.getTime());
 
@@ -290,10 +327,9 @@ export default function ProductDetailScreen() {
         <Text style={styles.sectionHeader}>Stock</Text>
         <InventoryBar product={product} showLabel={false} />
         <Text style={styles.statText}>
-          {product.currentQuantity} {product.containerUnit} on hand
-          {usageRefs.length === 0
-            ? ''
-            : ` · ${applicationsRemaining} ${applicationsRemaining === 1 ? 'use' : 'uses'} left`}
+          {usageRefs.length > 0
+            ? `${product.currentQuantity} ${product.name} ${unitAction} remaining`
+            : `${product.currentQuantity} ${product.containerUnit} on hand`}
         </Text>
         {usageRefs.length === 0 ? (
           <Text style={styles.metaText}>Link a task to track usage</Text>
