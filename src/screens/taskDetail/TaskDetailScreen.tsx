@@ -261,7 +261,7 @@ export default function TaskDetailScreen() {
       if (deductInventory) {
         await Promise.all(
           productUsages.map((usage) =>
-            deductProductUsage(householdId, usage.productId, usage.usageAmount)
+            deductProductUsage(householdId, usage.productId, usage.usageAmount, task.name)
           )
         );
       }

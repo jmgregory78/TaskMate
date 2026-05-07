@@ -111,16 +111,24 @@ export interface Task {
   assignedBy: string | null;
   reminderDaysBefore: number | null;
   snoozedUntil: Date | null;
+  pendingNotificationId: string | null;
 }
+
+export type DepletionMode = 'task' | 'auto';
+export type AutoDepletionUnit = 'day' | 'week' | 'month';
+export type ThresholdType = 'quantity' | 'percentage';
 
 export interface Product {
   id: string;
   householdId: string;
   name: string;
   amazonUrl: string;
-  containerSize: number;
   containerUnit: string;
   currentQuantity: number;
+  // Threshold fields (new unified approach)
+  thresholdType: ThresholdType;
+  thresholdValue: number;
+  // Legacy fields (kept for backwards compatibility during migration)
   lowThresholdPercent: number;
   lowThresholdQty: number | null;
   lastPurchasedAt: Date | null;
@@ -129,6 +137,12 @@ export interface Product {
   purchasePendingAt: Date | null;
   createdAt: Date;
   createdBy: string;
+  // Auto-depletion fields
+  depletionMode: DepletionMode;
+  autoDepletionRate: number;
+  autoDepletionUnit: AutoDepletionUnit;
+  lastAutoDepletedAt: Date | null;
+  lowStockNotifiedAt: Date | null;
 }
 
 export type TaskActivityType =
@@ -175,7 +189,6 @@ export interface PurchaseLog {
   purchasedBy: string;
   price: number;
   quantity: number;
-  containerSize: number;
   containerUnit: string;
   totalAdded: number;
 }
@@ -190,10 +203,29 @@ export interface FeedbackItem {
   read: boolean;
 }
 
-export function stockPercent(product: Product): number {
-  if (!product.containerSize || product.containerSize <= 0) return 0;
+// stockPercent calculates percentage based on maxQuantity
+// When maxQuantity is not provided, falls back to using currentQuantity (shows 100%)
+// For accurate progress bars, pass maxQuantity from history records
+export function stockPercent(product: Product, maxQuantity?: number): number {
+  const max = maxQuantity && maxQuantity > 0 ? maxQuantity : product.currentQuantity;
+  if (!max || max <= 0) return 100;
   return Math.min(
     100,
-    Math.round((product.currentQuantity / product.containerSize) * 100)
+    Math.round((product.currentQuantity / max) * 100)
   );
+}
+
+export type SupplyHistoryEventType =
+  | 'purchase'
+  | 'task_completion'
+  | 'manual_update'
+  | 'auto_depletion_weekly';
+
+export interface SupplyHistoryRecord {
+  id: string;
+  productId: string;
+  date: Date;
+  quantity: number;
+  eventType: SupplyHistoryEventType;
+  note?: string;
 }

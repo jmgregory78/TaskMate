@@ -82,7 +82,7 @@ export default function SuppliesScreen() {
 
   const openSuggested = () => {
     setSheetOpen(false);
-    navigation.navigate('SetupWizard', { mode: 'fromSupplies' });
+    navigation.navigate('SuggestedSupplies');
   };
   const openCustom = () => {
     setSheetOpen(false);
@@ -155,8 +155,19 @@ export default function SuppliesScreen() {
               reorderByDate = addDays(estimatedRunOutDate, -14);
             }
             const percent = stockPercent(product);
+            // Calculate threshold based on new threshold fields
+            let thresholdQty: number;
+            if (product.thresholdType === 'quantity') {
+              thresholdQty = product.thresholdValue;
+            } else if (product.thresholdType === 'percentage') {
+              thresholdQty = (product.thresholdValue / 100) * product.currentQuantity;
+            } else if (product.lowThresholdQty !== null) {
+              thresholdQty = product.lowThresholdQty;
+            } else {
+              thresholdQty = (product.lowThresholdPercent / 100) * product.currentQuantity;
+            }
             const isRedZone =
-              percent <= product.lowThresholdPercent ||
+              product.currentQuantity <= thresholdQty ||
               (reorderByDate !== null &&
                 reorderByDate.getTime() <= today.getTime());
 
@@ -543,7 +554,7 @@ function SupplyCard({ row, onTap, onBuy, onMenu }: SupplyCardProps) {
           ? `${row.product.currentQuantity} ${row.unitAction} remaining`
           : `${row.product.currentQuantity} ${row.product.containerUnit} on hand`}
         {row.estimatedRunOutDate
-          ? ` · runs out ~${format(row.estimatedRunOutDate, 'MMM yyyy')}`
+          ? ` · runs out ${format(row.estimatedRunOutDate, 'MMMM d, yyyy')}`
           : ''}
       </Text>
       {isRed && row.reorderByDate ? (

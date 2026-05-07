@@ -56,7 +56,6 @@ export default function AddProductUsageScreen() {
 
   const [newName, setNewName] = useState('');
   const [newAmazonUrl, setNewAmazonUrl] = useState('');
-  const [newContainerSize, setNewContainerSize] = useState('1');
   const [newContainerUnit, setNewContainerUnit] = useState('');
   const [newCurrentQty, setNewCurrentQty] = useState('');
   const [newLowThreshold, setNewLowThreshold] = useState('25');
@@ -155,9 +154,9 @@ export default function AddProductUsageScreen() {
       setError('Product name is required.');
       return;
     }
-    const containerSizeN = parseNumber(newContainerSize, 0);
-    if (containerSizeN <= 0) {
-      setError('Container size must be greater than 0.');
+    const currentQty = parseNumber(newCurrentQty, 1);
+    if (currentQty <= 0) {
+      setError('Current quantity must be greater than 0.');
       return;
     }
     const usageN = parseNumber(usageAmount, 0);
@@ -165,10 +164,6 @@ export default function AddProductUsageScreen() {
       setError('Usage amount must be greater than 0.');
       return;
     }
-    const currentQty =
-      newCurrentQty.trim().length > 0
-        ? parseNumber(newCurrentQty, containerSizeN)
-        : containerSizeN;
     const unit = newContainerUnit.trim();
 
     setError(null);
@@ -178,7 +173,6 @@ export default function AddProductUsageScreen() {
         householdId,
         name: trimmedName,
         amazonUrl: trimmedUrl,
-        containerSize: containerSizeN,
         containerUnit: unit,
         currentQuantity: currentQty,
         lowThresholdPercent: parseNumber(newLowThreshold, 25),
@@ -282,41 +276,24 @@ export default function AddProductUsageScreen() {
           keyboardType="url"
         />
 
-        <View style={styles.row}>
-          <View style={styles.halfCol}>
-            <Text style={styles.label}>Container size</Text>
-            <TextInput
-              style={styles.input}
-              value={newContainerSize}
-              onChangeText={setNewContainerSize}
-              keyboardType="decimal-pad"
-              placeholder="1"
-              placeholderTextColor={Colors.textLight}
-            />
-          </View>
-          <View style={styles.halfCol}>
-            <Text style={styles.label}>Unit</Text>
-            <TextInput
-              style={styles.input}
-              value={newContainerUnit}
-              onChangeText={setNewContainerUnit}
-              placeholder="oz, filters, qt"
-              placeholderTextColor={Colors.textLight}
-              autoCapitalize="none"
-            />
-          </View>
-        </View>
-
-        <Text style={styles.label}>
-          Current quantity on hand (defaults to full)
-        </Text>
+        <Text style={styles.label}>Current quantity on hand</Text>
         <TextInput
           style={styles.input}
           value={newCurrentQty}
           onChangeText={setNewCurrentQty}
           keyboardType="decimal-pad"
-          placeholder={`Defaults to ${newContainerSize || '0'}`}
+          placeholder="e.g. 10"
           placeholderTextColor={Colors.textLight}
+        />
+
+        <Text style={styles.label}>Unit</Text>
+        <TextInput
+          style={styles.input}
+          value={newContainerUnit}
+          onChangeText={setNewContainerUnit}
+          placeholder="oz, filters, qt"
+          placeholderTextColor={Colors.textLight}
+          autoCapitalize="none"
         />
 
         <Text style={styles.label}>Low stock threshold (%)</Text>

@@ -52,7 +52,7 @@ export default function SupplyTypeSheet({
             onPress={onCustom}
             activeOpacity={0.85}
           >
-            <Text style={styles.secondaryText}>📦 Add a Supply</Text>
+            <Text style={styles.secondaryText}>📦 Add a Custom Supply</Text>
           </TouchableOpacity>
 
           <TouchableOpacity

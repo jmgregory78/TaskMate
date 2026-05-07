@@ -56,12 +56,13 @@ interface TimelineSection {
 
 // Helper to check if a product is low stock
 function isLowStock(product: Product): boolean {
-  const containerSize = product.containerSize || 1;
   let thresholdQty: number;
   if (product.lowThresholdQty !== null && product.lowThresholdQty !== undefined) {
     thresholdQty = product.lowThresholdQty;
   } else {
-    thresholdQty = (product.lowThresholdPercent / 100) * containerSize;
+    // For percentage threshold, use current quantity as base (will always be at threshold)
+    // This is a fallback - ideally maxQuantity from history should be used
+    thresholdQty = Math.max(1, (product.lowThresholdPercent / 100) * product.currentQuantity);
   }
   return product.currentQuantity <= thresholdQty;
 }
@@ -227,7 +228,7 @@ export default function TimelineScreen() {
 
   const openSuggested = () => {
     setSheetOpen(false);
-    navigation.navigate('SetupWizard', { mode: 'fromTasks' });
+    navigation.navigate('SuggestedTasks');
   };
   const openCustom = () => {
     setSheetOpen(false);

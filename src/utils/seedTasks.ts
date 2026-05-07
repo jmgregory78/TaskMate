@@ -16,7 +16,6 @@ interface SeedTask {
 
 interface SeedSharedProduct {
   name: string;
-  containerSize: number;
   containerUnit: string;
   currentQuantity: number;
   amazonUrl: string;
@@ -70,15 +69,15 @@ const SEED_TASKS: SeedTask[] = [
 ];
 
 const SEED_SHARED_PRODUCTS: SeedSharedProduct[] = [
-  { name: 'Leisure Time Shock', containerSize: 32, containerUnit: 'oz', currentQuantity: 19.2, amazonUrl: 'https://amazon.com/dp/B000HHL2DQ' },
-  { name: 'HTH pH Up', containerSize: 64, containerUnit: 'oz', currentQuantity: 48, amazonUrl: 'https://amazon.com/dp/B003DZF5KG' },
-  { name: 'HTH pH Down', containerSize: 64, containerUnit: 'oz', currentQuantity: 32, amazonUrl: 'https://amazon.com/dp/B00936OAPI' },
-  { name: 'Leisure Time Spa Bromine Tabs', containerSize: 96, containerUnit: 'oz', currentQuantity: 60, amazonUrl: 'https://amazon.com/dp/B000255QXG' },
-  { name: 'Pleatco Hot Tub Filter', containerSize: 2, containerUnit: 'filters', currentQuantity: 1, amazonUrl: 'https://amazon.com/dp/B000BKQFQO' },
-  { name: 'Nordic Pure 16x25x1 HVAC Filter', containerSize: 6, containerUnit: 'filters', currentQuantity: 2, amazonUrl: 'https://amazon.com/dp/B00936OAPI' },
-  { name: 'EveryDrop Refrigerator Filter', containerSize: 1, containerUnit: 'filters', currentQuantity: 0, amazonUrl: 'https://amazon.com/dp/B00APWJHOI' },
-  { name: 'Mobil 1 Synthetic 0W-20', containerSize: 5, containerUnit: 'qt', currentQuantity: 0, amazonUrl: 'https://amazon.com/dp/B01M73RA2G' },
-  { name: 'Fram Ultra Oil Filter', containerSize: 1, containerUnit: 'filters', currentQuantity: 1, amazonUrl: 'https://amazon.com/dp/B077KG8TQT' },
+  { name: 'Leisure Time Shock', containerUnit: 'oz', currentQuantity: 19.2, amazonUrl: 'https://amazon.com/dp/B000HHL2DQ' },
+  { name: 'HTH pH Up', containerUnit: 'oz', currentQuantity: 48, amazonUrl: 'https://amazon.com/dp/B003DZF5KG' },
+  { name: 'HTH pH Down', containerUnit: 'oz', currentQuantity: 32, amazonUrl: 'https://amazon.com/dp/B00936OAPI' },
+  { name: 'Leisure Time Spa Bromine Tabs', containerUnit: 'oz', currentQuantity: 60, amazonUrl: 'https://amazon.com/dp/B000255QXG' },
+  { name: 'Pleatco Hot Tub Filter', containerUnit: 'filters', currentQuantity: 1, amazonUrl: 'https://amazon.com/dp/B000BKQFQO' },
+  { name: 'Nordic Pure 16x25x1 HVAC Filter', containerUnit: 'filters', currentQuantity: 2, amazonUrl: 'https://amazon.com/dp/B00936OAPI' },
+  { name: 'EveryDrop Refrigerator Filter', containerUnit: 'filters', currentQuantity: 0, amazonUrl: 'https://amazon.com/dp/B00APWJHOI' },
+  { name: 'Mobil 1 Synthetic 0W-20', containerUnit: 'qt', currentQuantity: 0, amazonUrl: 'https://amazon.com/dp/B01M73RA2G' },
+  { name: 'Fram Ultra Oil Filter', containerUnit: 'filters', currentQuantity: 1, amazonUrl: 'https://amazon.com/dp/B077KG8TQT' },
 ];
 
 const SEED_USAGES: SeedUsage[] = [
@@ -164,7 +163,6 @@ export async function seedDummyTasks(
       householdId,
       name: p.name,
       amazonUrl: p.amazonUrl,
-      containerSize: p.containerSize,
       containerUnit: p.containerUnit,
       currentQuantity: p.currentQuantity,
       lowThresholdPercent: 25,

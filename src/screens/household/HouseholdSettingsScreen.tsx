@@ -33,6 +33,10 @@ import {
   updateMemberRole,
 } from '../../services/inviteService';
 import {
+  scheduleTestNotification,
+  getAllPendingNotifications,
+} from '../../services/notificationService';
+import {
   Household,
   HouseholdInvite,
   HouseholdMember,
@@ -528,6 +532,51 @@ export default function HouseholdSettingsScreen() {
               </Text>
             </TouchableOpacity>
           ) : null}
+
+          {/* Debug: Test Notification Button - REMOVE AFTER TESTING */}
+          <View style={styles.card}>
+            <Text style={styles.sectionLabel}>Debug: Notifications</Text>
+            <TouchableOpacity
+              style={styles.debugButton}
+              onPress={async () => {
+                try {
+                  const id = await scheduleTestNotification();
+                  Alert.alert(
+                    'Test Scheduled',
+                    `Notification will appear in 10 seconds.\nID: ${id}\n\nMinimize the app to test background notifications.`
+                  );
+                } catch (e) {
+                  Alert.alert('Error', (e as Error).message);
+                }
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.debugButtonText}>
+                🔔 Test Notification (10s)
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.debugButton, styles.debugButtonSecondary]}
+              onPress={async () => {
+                try {
+                  const pending = await getAllPendingNotifications();
+                  Alert.alert(
+                    'Pending Notifications',
+                    pending.length === 0
+                      ? 'No scheduled notifications'
+                      : `${pending.length} notification(s) scheduled.\n\nCheck console for details.`
+                  );
+                } catch (e) {
+                  Alert.alert('Error', (e as Error).message);
+                }
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.debugButtonTextSecondary}>
+                📋 List Pending Notifications
+              </Text>
+            </TouchableOpacity>
+          </View>
         </ScrollView>
         </KeyboardAvoidingView>
       )}
@@ -763,5 +812,28 @@ const styles = StyleSheet.create({
     color: Colors.textOnDark,
     fontSize: 16,
     fontWeight: '700',
+  },
+  debugButton: {
+    height: 44,
+    backgroundColor: Colors.primary,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  debugButtonSecondary: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  debugButtonText: {
+    color: Colors.textOnDark,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  debugButtonTextSecondary: {
+    color: Colors.textSecondary,
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

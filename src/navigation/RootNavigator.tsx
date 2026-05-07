@@ -100,7 +100,12 @@ export type AppStackParamList = {
   ProductDetail: { householdId: string; productId: string };
   CreateProduct: undefined;
   EditProduct: { product: Product };
-  SuggestedSupplies: undefined;
+  SuggestedSupplies: {
+    filterSupplyIds?: string[];
+    expandCategoryIds?: string[];
+    preCheckSupplyIds?: string[];
+    fromTaskCategory?: string;
+  } | undefined;
   SetupWizard: { mode: SetupWizardMode };
   HouseholdSettings: undefined;
   AppTutorial: undefined;

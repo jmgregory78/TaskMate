@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
+import { Alert, Linking, Platform } from 'react-native';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { Task } from '../types/models';
@@ -60,35 +61,78 @@ export function computeSnoozeTriggerDate(duration: SnoozeDuration): Date {
 // Configure how notifications appear when app is foregrounded.
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
     shouldShowBanner: true,
     shouldShowList: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
   }),
 });
 
-export async function registerForPushNotifications(
-  userId: string
-): Promise<string | null> {
+/**
+ * Request notification permissions with iOS-specific options.
+ * Shows an alert if permissions are denied with option to open Settings.
+ */
+export async function requestNotificationPermissions(): Promise<boolean> {
   if (!Device.isDevice) {
     console.log('[notifications] only work on physical devices');
-    return null;
+    return false;
   }
 
   try {
     const { status: existingStatus } =
       await Notifications.getPermissionsAsync();
+
     let finalStatus = existingStatus;
+
     if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
+      const { status } = await Notifications.requestPermissionsAsync({
+        ios: {
+          allowAlert: true,
+          allowBadge: true,
+          allowSound: true,
+        },
+      });
       finalStatus = status;
     }
+
     if (finalStatus !== 'granted') {
       console.log('[notifications] permission denied');
-      return null;
+      Alert.alert(
+        'Notifications Disabled',
+        'Please enable notifications for TaskMate in Settings to receive task reminders.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Open Settings',
+            onPress: () => {
+              if (Platform.OS === 'ios') {
+                Linking.openURL('app-settings:');
+              } else {
+                Linking.openSettings();
+              }
+            },
+          },
+        ]
+      );
+      return false;
     }
 
+    return true;
+  } catch (e) {
+    console.warn('[notifications] permission request failed:', e);
+    return false;
+  }
+}
+
+export async function registerForPushNotifications(
+  userId: string
+): Promise<string | null> {
+  const hasPermission = await requestNotificationPermissions();
+  if (!hasPermission) {
+    return null;
+  }
+
+  try {
     const token = (
       await Notifications.getExpoPushTokenAsync({ projectId: EXPO_PROJECT_ID })
     ).data;
@@ -120,7 +164,13 @@ export async function scheduleTaskReminder(
   triggerDate.setDate(triggerDate.getDate() - daysBefore);
   triggerDate.setHours(reminderHour, reminderMinute, 0, 0);
 
-  if (triggerDate <= new Date()) return null;
+  const now = Date.now();
+  const triggerTime = triggerDate.getTime();
+
+  if (triggerTime <= now) return null;
+
+  // Use seconds-based trigger for better background compatibility
+  const secondsUntilTrigger = Math.floor((triggerTime - now) / 1000);
 
   try {
     const id = await Notifications.scheduleNotificationAsync({
@@ -131,11 +181,12 @@ export async function scheduleTaskReminder(
             ? `${taskIcon} ${taskName} is due today!`
             : `Due in ${daysBefore} day${daysBefore > 1 ? 's' : ''}`,
         data: { taskId, householdId },
-        sound: true,
+        sound: 'default',
       },
       trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.DATE,
-        date: triggerDate,
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: secondsUntilTrigger,
+        repeats: false,
       },
     });
     return id;
@@ -150,6 +201,63 @@ export async function cancelTaskReminder(notificationId: string): Promise<void> 
     await Notifications.cancelScheduledNotificationAsync(notificationId);
   } catch (e) {
     console.warn('[notifications] cancel failed:', e);
+  }
+}
+
+/**
+ * Schedule a snooze notification for a task.
+ * Cancels any existing pending notification for this task first.
+ * Returns the new notification ID so it can be stored on the task.
+ */
+export async function scheduleSnoozeNotification(
+  task: { id: string; name: string; icon?: string; pendingNotificationId?: string | null },
+  snoozeUntil: Date,
+  householdId: string
+): Promise<string | null> {
+  // Cancel any existing pending notification for this task
+  if (task.pendingNotificationId) {
+    try {
+      await Notifications.cancelScheduledNotificationAsync(task.pendingNotificationId);
+    } catch (e) {
+      console.warn('[notifications] cancel existing snooze failed:', e);
+    }
+  }
+
+  const now = Date.now();
+  const snoozeTime = snoozeUntil.getTime();
+
+  // Don't schedule if the snooze time is in the past
+  if (snoozeTime <= now) {
+    return null;
+  }
+
+  // Use seconds-based trigger for better background compatibility
+  const secondsUntilSnooze = Math.floor((snoozeTime - now) / 1000);
+
+  try {
+    const notificationId = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Task Reminder',
+        body: `${task.icon || '📋'} ${task.name} needs your attention`,
+        data: { taskId: task.id, householdId },
+        sound: 'default',
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: secondsUntilSnooze,
+        repeats: false,
+      },
+    });
+
+    // Log for debugging
+    console.log(
+      `[notifications] Snooze scheduled: ${notificationId} for ${task.name} in ${secondsUntilSnooze} seconds`
+    );
+
+    return notificationId;
+  } catch (e) {
+    console.warn('[notifications] schedule snooze failed:', e);
+    return null;
   }
 }
 
@@ -242,6 +350,31 @@ export async function sendAssignmentNotification(
   }
 }
 
+/**
+ * Schedule a test notification that fires in 10 seconds.
+ * Use this to verify notifications are working in the background.
+ */
+export async function scheduleTestNotification(): Promise<string> {
+  const id = await Notifications.scheduleNotificationAsync({
+    content: {
+      title: '🔔 Test Notification',
+      body: 'If you see this in the background, notifications are working!',
+      sound: 'default',
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+      seconds: 10,
+      repeats: false,
+    },
+  });
+  console.log('[notifications] Test notification scheduled:', id);
+  return id;
+}
+
+/**
+ * Legacy test notification function.
+ * @deprecated Use scheduleTestNotification instead
+ */
 export async function sendTestNotification(
   taskId: string,
   taskName: string,
@@ -252,13 +385,24 @@ export async function sendTestNotification(
       title: '🔔 Test Reminder',
       body: `${taskName} is due tomorrow!`,
       data: { taskId, householdId },
-      sound: true,
+      sound: 'default',
     },
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
       seconds: 5,
+      repeats: false,
     },
   });
+}
+
+/**
+ * Get all pending scheduled notifications.
+ * Useful for debugging to confirm notifications were registered.
+ */
+export async function getAllPendingNotifications(): Promise<Notifications.NotificationRequest[]> {
+  const pending = await Notifications.getAllScheduledNotificationsAsync();
+  console.log('[notifications] Pending notifications:', JSON.stringify(pending, null, 2));
+  return pending;
 }
 
 export async function getNotificationPrefs(

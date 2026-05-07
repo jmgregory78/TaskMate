@@ -38,10 +38,50 @@ import {
   getSuggestedSuppliesFor,
   getSuggestedTasksFor,
 } from '../../data/suggested';
-import { Product, RecurrenceFrequency } from '../../types/models';
+import {
+  AutoDepletionUnit,
+  DepletionMode,
+  Product,
+  RecurrenceFrequency,
+  ThresholdType,
+} from '../../types/models';
 import { Colors } from '../../constants/colors';
 
-export type SetupWizardMode = 'firstTime' | 'fromTasks' | 'fromSupplies';
+// Smart defaults for threshold based on supply type
+function getSmartThresholdDefaults(supplyId: string, supplyName: string): { type: ThresholdType; value: number } {
+  const id = supplyId.toLowerCase();
+  const name = supplyName.toLowerCase();
+
+  // Percentage defaults (25%)
+  if (id.includes('fertilizer') || name.includes('fertilizer')) {
+    return { type: 'percentage', value: 25 };
+  }
+  if (id.includes('pool-') || name.includes('pool ')) {
+    return { type: 'percentage', value: 25 };
+  }
+  if (id.includes('hot-tub') || name.includes('hot tub')) {
+    return { type: 'percentage', value: 25 };
+  }
+
+  // Quantity defaults with specific values
+  if (id.includes('prescription') || name.includes('prescription')) {
+    return { type: 'quantity', value: 7 };
+  }
+  if (id.includes('vitamins') || name.includes('vitamin')) {
+    return { type: 'quantity', value: 7 };
+  }
+  if (id.includes('contacts') || name.includes('contact lens')) {
+    return { type: 'quantity', value: 7 };
+  }
+  if (id.includes('smoke-batteries') || name.includes('smoke detector')) {
+    return { type: 'quantity', value: 2 };
+  }
+
+  // Default: quantity with value 1
+  return { type: 'quantity', value: 1 };
+}
+
+export type SetupWizardMode = 'firstTime';
 
 type SetupWizardRoute = RouteProp<
   { SetupWizard: { mode: SetupWizardMode } },
@@ -154,7 +194,7 @@ const TASK_NAME_TO_SUPPLY_ID: Record<string, string> = {
   'clean washing machine': 'washer-cleaner',
   'refill water softener': 'softener-salt',
   'pool chemical check': 'pool-chlorine',
-  'hot tub maintenance': 'hot-tub-chemicals',
+  'hot tub maintenance': 'smartchlor-cartridge',
 };
 
 function findAssociatedSupply(taskName: string): SuggestedSupply | null {
@@ -182,6 +222,7 @@ export default function SetupWizardScreen() {
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [expandedCategoryIds, setExpandedCategoryIds] = useState<Set<WizardCategoryId>>(new Set());
+  const [expandedSupplyCategoryIds, setExpandedSupplyCategoryIds] = useState<Set<WizardCategoryId>>(new Set());
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [existingTaskNames, setExistingTaskNames] = useState<Set<string>>(
@@ -308,13 +349,7 @@ export default function SetupWizardScreen() {
 
   // ----- Step navigation -----
   // Step 1 (accordion tasks) -> configure queue -> Step 2 (supplies) -> Step 3 (done)
-  // For 'fromTasks' mode, skip Step 2 and go directly back to Timeline
   const advanceFrom1 = () => {
-    if (mode === 'fromTasks') {
-      // When adding tasks from the Tasks tab, skip supplies step and return to Timeline
-      navigation.navigate('Main', { screen: 'Tasks' });
-      return;
-    }
     if (supplyGroups.length > 0) setStep(2);
     else setStep(3);
   };
@@ -437,12 +472,14 @@ export default function SetupWizardScreen() {
   const handleSupplyPromptAdd = async (data: {
     name: string;
     qty: number;
-    containerSize: number;
     unit: string;
     amazonUrl: string;
     thresholdType: 'qty' | 'pct';
     thresholdQty: number;
     thresholdPct: number;
+    depletionMode: DepletionMode;
+    autoDepletionRate: number;
+    autoDepletionUnit: AutoDepletionUnit;
   }) => {
     if (supplyPrompt?.scenario !== 'add') return;
     if (!user || !householdId) return;
@@ -450,15 +487,19 @@ export default function SetupWizardScreen() {
     const supply = supplyPrompt.supply;
     const taskId = supplyPrompt.taskId;
     try {
+      const thresholdType: ThresholdType = data.thresholdType === 'qty' ? 'quantity' : 'percentage';
+      const thresholdValue = data.thresholdType === 'qty' ? data.thresholdQty : data.thresholdPct;
       const newId = await createProduct(householdId, userLabel, {
         householdId,
         name: data.name,
         amazonUrl: data.amazonUrl,
-        containerSize: data.containerSize,
         containerUnit: data.unit,
         currentQuantity: data.qty,
-        lowThresholdPercent: data.thresholdType === 'pct' ? data.thresholdPct : 25,
-        lowThresholdQty: data.thresholdType === 'qty' ? data.thresholdQty : null,
+        thresholdType,
+        thresholdValue,
+        depletionMode: data.depletionMode,
+        autoDepletionRate: data.autoDepletionRate,
+        autoDepletionUnit: data.autoDepletionUnit,
       });
       // Link the new supply to the task that triggered this prompt by writing
       // a TaskProductUsage record. Default usage = 1 of the supply's unit per
@@ -492,9 +533,10 @@ export default function SetupWizardScreen() {
           householdId,
           name: data.name,
           amazonUrl: data.amazonUrl,
-          containerSize: data.containerSize,
           containerUnit: data.unit,
           currentQuantity: data.qty,
+          thresholdType: data.thresholdType === 'qty' ? 'quantity' : 'percentage',
+          thresholdValue: data.thresholdType === 'qty' ? data.thresholdQty : data.thresholdPct,
           lowThresholdPercent: data.thresholdType === 'pct' ? data.thresholdPct : 25,
           lowThresholdQty: data.thresholdType === 'qty' ? data.thresholdQty : null,
           lastPurchasedAt: null,
@@ -503,6 +545,11 @@ export default function SetupWizardScreen() {
           purchasePendingAt: null,
           createdAt: new Date(),
           createdBy: userLabel,
+          depletionMode: data.depletionMode,
+          autoDepletionRate: data.autoDepletionRate,
+          autoDepletionUnit: data.autoDepletionUnit,
+          lastAutoDepletedAt: null,
+          lowStockNotifiedAt: null,
         },
       ]);
       setAddedSupplyCount((c) => c + 1);
@@ -586,14 +633,15 @@ export default function SetupWizardScreen() {
         checkedSupplies
           .filter((s) => !writtenSupplyIds.current.has(s.id))
           .map(async (s) => {
+            const thresholdDefaults = getSmartThresholdDefaults(s.id, s.name);
             await createProduct(householdId, userLabel, {
               householdId,
               name: s.name,
               amazonUrl: '',
-              containerSize: s.defaultQty,
               containerUnit: s.unit,
               currentQuantity: s.defaultQty,
-              lowThresholdPercent: 25,
+              thresholdType: thresholdDefaults.type,
+              thresholdValue: thresholdDefaults.value,
             });
             writtenSupplyIds.current.add(s.id);
           })
@@ -619,14 +667,12 @@ export default function SetupWizardScreen() {
   };
 
   const handleClose = () => {
-    if (mode === 'firstTime') {
-      navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
-    } else {
-      navigation.goBack();
-    }
+    // First-time wizard - reset navigation to main screen
+    navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
   };
 
   const handleDone = async () => {
+    // Mark setup wizard as complete
     if (user) {
       try {
         await markSetupWizardComplete(user.uid);
@@ -634,15 +680,19 @@ export default function SetupWizardScreen() {
         console.warn('[SetupWizard] markSetupWizardComplete failed:', e);
       }
     }
-    if (mode === 'firstTime') {
-      navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
-    } else {
-      navigation.goBack();
-    }
+    navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
   };
 
   const toggleCategoryExpanded = (id: WizardCategoryId) => {
     setExpandedCategoryIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const toggleSupplyCategoryExpanded = (id: WizardCategoryId) => {
+    setExpandedSupplyCategoryIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -679,8 +729,8 @@ export default function SetupWizardScreen() {
 
   // ----- Render -----
   const inConfigQueue = configIndex !== null;
-  const showCloseButton =
-    mode !== 'firstTime' && step !== 3 && !inConfigQueue;
+  // In first-time wizard, don't show close button (user should complete the wizard)
+  const showCloseButton = false;
   const showBackButton = inConfigQueue;
 
   if (!loaded) {
@@ -793,7 +843,9 @@ export default function SetupWizardScreen() {
         ) : step === 2 ? (
           <Step2Supplies
             groups={supplyGroups}
+            expandedIds={expandedSupplyCategoryIds}
             checkedIds={checkedSupplyIds}
+            onToggleExpand={toggleSupplyCategoryExpanded}
             onToggle={toggleSupply}
             onSkip={handleSkipSupplies}
             onAdd={handleAddSupplies}
@@ -803,7 +855,6 @@ export default function SetupWizardScreen() {
           />
         ) : step === 3 ? (
           <Step3Done
-            mode={mode}
             taskCount={addedTaskCount}
             supplyCount={addedSupplyCount}
             onDone={handleDone}
@@ -1300,10 +1351,12 @@ function unitWord(frequency: RecurrenceFrequency, interval: number): string {
   return interval === 1 ? base : `${base}s`;
 }
 
-// ----- Step 2: Supplies -----
+// ----- Step 2: Supplies (Accordion pattern) -----
 function Step2Supplies({
   groups,
+  expandedIds,
   checkedIds,
+  onToggleExpand,
   onToggle,
   onSkip,
   onAdd,
@@ -1312,7 +1365,9 @@ function Step2Supplies({
   checkedCount,
 }: {
   groups: SupplyGroup[];
+  expandedIds: Set<WizardCategoryId>;
   checkedIds: Set<string>;
+  onToggleExpand: (id: WizardCategoryId) => void;
   onToggle: (id: string) => void;
   onSkip: () => void;
   onAdd: () => void;
@@ -1320,61 +1375,78 @@ function Step2Supplies({
   error: string | null;
   checkedCount: number;
 }) {
+  // Count selected supplies per category
+  const selectedCountByCategory = (categoryId: WizardCategoryId): number => {
+    const group = groups.find((g) => g.category.id === categoryId);
+    if (!group) return 0;
+    return group.items.filter((s) => checkedIds.has(s.id)).length;
+  };
+
   return (
     <>
       <View style={styles.titleBlock}>
-        <View style={styles.titleRow}>
-          <View style={styles.flex}>
-            <Text style={styles.title}>Suggested Supplies</Text>
-            <Text style={styles.subtitle}>
-              Check the supplies you'd like to track.
-            </Text>
-          </View>
-          <TouchableOpacity
-            onPress={onSkip}
-            style={styles.skipLink}
-            activeOpacity={0.7}
-            disabled={submitting}
-          >
-            <Text style={styles.skipText}>Skip</Text>
-          </TouchableOpacity>
-        </View>
+        <Text style={styles.title}>Suggested Supplies</Text>
+        <Text style={styles.subtitle}>Choose the supplies you want to track</Text>
       </View>
       <ScrollView
         style={styles.flex}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
-        {groups.map((g) => (
-          <View key={g.category.id} style={styles.groupBlock}>
-            <Text style={styles.groupHeader}>
-              {g.category.emoji} {g.category.name}
-            </Text>
-            {g.items.map((s) => {
-              const checked = checkedIds.has(s.id);
-              return (
-                <TouchableOpacity
-                  key={s.id}
-                  style={[styles.itemRow, checked && styles.itemRowOn]}
-                  onPress={() => onToggle(s.id)}
-                  activeOpacity={0.7}
-                  disabled={submitting}
-                >
-                  <Checkbox checked={checked} />
-                  {s.icon ? (
-                    <Text style={styles.itemIcon}>{s.icon}</Text>
-                  ) : null}
-                  <View style={styles.flex}>
-                    <Text style={styles.itemName}>{s.name}</Text>
-                    <Text style={styles.itemMeta}>
-                      Default: {s.defaultQty} {s.unit}
+        {groups.map((g) => {
+          const expanded = expandedIds.has(g.category.id);
+          const selectedCount = selectedCountByCategory(g.category.id);
+          return (
+            <View key={g.category.id} style={styles.accordionCard}>
+              <TouchableOpacity
+                style={styles.accordionHeader}
+                onPress={() => onToggleExpand(g.category.id)}
+                activeOpacity={0.7}
+                disabled={submitting}
+              >
+                <Text style={styles.categoryEmoji}>{g.category.emoji}</Text>
+                <Text style={styles.accordionTitle}>{g.category.name}</Text>
+                {selectedCount > 0 ? (
+                  <View style={styles.selectedBadge}>
+                    <Text style={styles.selectedBadgeText}>
+                      {selectedCount} selected
                     </Text>
                   </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        ))}
+                ) : null}
+                <Text style={styles.accordionChevron}>
+                  {expanded ? '▾' : '▸'}
+                </Text>
+              </TouchableOpacity>
+              {expanded ? (
+                <View style={styles.accordionContent}>
+                  {g.items.map((s) => {
+                    const checked = checkedIds.has(s.id);
+                    return (
+                      <TouchableOpacity
+                        key={s.id}
+                        style={[styles.itemRow, checked && styles.itemRowOn]}
+                        onPress={() => onToggle(s.id)}
+                        activeOpacity={0.7}
+                        disabled={submitting}
+                      >
+                        <Checkbox checked={checked} />
+                        {s.icon ? (
+                          <Text style={styles.itemIcon}>{s.icon}</Text>
+                        ) : null}
+                        <View style={styles.flex}>
+                          <Text style={styles.itemName}>{s.name}</Text>
+                          <Text style={styles.itemMeta}>
+                            Default: {s.defaultQty} {s.unit}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ) : null}
+            </View>
+          );
+        })}
       </ScrollView>
       <View style={styles.bottomBar}>
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -1397,13 +1469,21 @@ function Step2Supplies({
             </Text>
           )}
         </TouchableOpacity>
+        <TouchableOpacity
+          onPress={onSkip}
+          style={styles.skipFullRow}
+          activeOpacity={0.7}
+          disabled={submitting}
+        >
+          <Text style={styles.skipText}>Skip</Text>
+        </TouchableOpacity>
       </View>
     </>
   );
 }
 
 // ----- SupplySheet (prompt after a task is saved) -----
-type ThresholdType = 'qty' | 'pct';
+type SheetThresholdType = 'qty' | 'pct';
 
 function SupplySheet({
   prompt,
@@ -1415,12 +1495,14 @@ function SupplySheet({
   onAdd: (data: {
     name: string;
     qty: number;
-    containerSize: number;
     unit: string;
     amazonUrl: string;
-    thresholdType: ThresholdType;
+    thresholdType: SheetThresholdType;
     thresholdQty: number;
     thresholdPct: number;
+    depletionMode: DepletionMode;
+    autoDepletionRate: number;
+    autoDepletionUnit: AutoDepletionUnit;
   }) => void;
   onUpdate: (qty: number) => void;
   onDismiss: () => void;
@@ -1430,14 +1512,18 @@ function SupplySheet({
   // State for all editable fields
   const [nameText, setNameText] = useState('');
   const [qtyText, setQtyText] = useState('0');
-  const [containerSizeText, setContainerSizeText] = useState('1');
   const [unitText, setUnitText] = useState('');
   const [amazonUrl, setAmazonUrl] = useState('');
 
   // Reorder threshold state
-  const [thresholdType, setThresholdType] = useState<ThresholdType>('qty');
+  const [thresholdType, setThresholdType] = useState<SheetThresholdType>('qty');
   const [thresholdQtyText, setThresholdQtyText] = useState('1');
   const [thresholdPctText, setThresholdPctText] = useState('25');
+
+  // Depletion mode state
+  const [depletionMode, setDepletionMode] = useState<DepletionMode>('task');
+  const [autoRateText, setAutoRateText] = useState('1');
+  const [autoUnit, setAutoUnit] = useState<AutoDepletionUnit>('day');
 
   // Track which prompt we've seeded for
   const seedKeyRef = useRef<string | null>(null);
@@ -1454,19 +1540,54 @@ function SupplySheet({
       if (prompt.scenario === 'add') {
         setNameText(prompt.supply.name);
         setQtyText(String(prompt.supply.defaultQty));
-        setContainerSizeText(String(prompt.supply.containerSize));
         setUnitText(prompt.supply.unit);
         setAmazonUrl('');
         // Reset threshold to defaults
         setThresholdType('qty');
         setThresholdQtyText('1');
         setThresholdPctText('25');
+
+        // Smart defaults for depletion mode based on supply name/id
+        const supplyId = prompt.supply.id.toLowerCase();
+        const supplyName = prompt.supply.name.toLowerCase();
+        const autoSupplies = [
+          'prescription', 'vitamins', 'contacts', 'contact lenses',
+          'dishwasher-cleaner', 'washer-cleaner', 'softener-salt',
+          'septic-tablets', 'lawn-fertilizer',
+        ];
+        const isAutoSupply = autoSupplies.some(
+          (s) => supplyId.includes(s) || supplyName.includes(s.replace('-', ' '))
+        );
+
+        if (isAutoSupply) {
+          setDepletionMode('auto');
+          // Set smart defaults for rate
+          if (supplyId.includes('prescription') || supplyId.includes('vitamins') || supplyId.includes('contacts')) {
+            setAutoRateText('1');
+            setAutoUnit('day');
+          } else if (supplyId.includes('dishwasher') || supplyId.includes('washer') ||
+                     supplyId.includes('softener') || supplyId.includes('septic') ||
+                     supplyId.includes('fertilizer')) {
+            setAutoRateText('1');
+            setAutoUnit('month');
+          } else {
+            setAutoRateText('1');
+            setAutoUnit('day');
+          }
+        } else {
+          setDepletionMode('task');
+          setAutoRateText('1');
+          setAutoUnit('day');
+        }
       } else {
         setNameText(prompt.product.name);
         setQtyText(String(prompt.product.currentQuantity));
-        setContainerSizeText(String(prompt.product.containerSize));
         setUnitText(prompt.product.containerUnit || prompt.supply.unit);
         setAmazonUrl(prompt.product.amazonUrl || '');
+        // Use existing depletion settings for updates
+        setDepletionMode(prompt.product.depletionMode || 'task');
+        setAutoRateText(String(prompt.product.autoDepletionRate || 1));
+        setAutoUnit(prompt.product.autoDepletionUnit || 'day');
       }
     }
   }, [prompt]);
@@ -1480,12 +1601,6 @@ function SupplySheet({
   const safeQty = Number.isFinite(parsedQty) && parsedQty >= 0 ? parsedQty : 0;
   const inc = () => setQtyText(String(safeQty + 1));
   const dec = () => setQtyText(String(Math.max(0, safeQty - 1)));
-
-  const parsedContainerSize = parseInt(containerSizeText, 10);
-  const safeContainerSize =
-    Number.isFinite(parsedContainerSize) && parsedContainerSize > 0
-      ? parsedContainerSize
-      : 1;
 
   const title = isAdd ? 'Add New Supply' : 'Update Supply';
 
@@ -1501,20 +1616,63 @@ function SupplySheet({
       ? parsedThresholdPct
       : 25;
 
-  // Calculate what the percentage threshold means in quantity terms (based on container size)
-  const pctAsQty = Math.floor((safeThresholdPct / 100) * safeContainerSize);
+  // Calculate what the percentage threshold means in quantity terms (based on current qty)
+  const pctAsQty = Math.floor((safeThresholdPct / 100) * safeQty);
+
+  // Parse auto depletion rate
+  const parsedAutoRate = parseInt(autoRateText, 10);
+  const safeAutoRate = Number.isFinite(parsedAutoRate) && parsedAutoRate > 0 ? parsedAutoRate : 1;
+
+  // Calculate estimated duration
+  const calcDuration = (): string => {
+    if (depletionMode !== 'auto') return '';
+    if (safeAutoRate <= 0 || safeQty <= 0) return '';
+
+    let daysPerUnit: number;
+    switch (autoUnit) {
+      case 'day':
+        daysPerUnit = 1;
+        break;
+      case 'week':
+        daysPerUnit = 7;
+        break;
+      case 'month':
+        daysPerUnit = 30;
+        break;
+    }
+    const totalDays = Math.floor((safeQty / safeAutoRate) * daysPerUnit);
+
+    if (totalDays >= 365) {
+      const years = Math.floor(totalDays / 365);
+      const months = Math.floor((totalDays % 365) / 30);
+      return months > 0
+        ? `${years} year${years === 1 ? '' : 's'} ${months} month${months === 1 ? '' : 's'}`
+        : `${years} year${years === 1 ? '' : 's'}`;
+    }
+    if (totalDays >= 30) {
+      const months = Math.floor(totalDays / 30);
+      return `${months} month${months === 1 ? '' : 's'}`;
+    }
+    if (totalDays >= 7) {
+      const weeks = Math.floor(totalDays / 7);
+      return `${weeks} week${weeks === 1 ? '' : 's'}`;
+    }
+    return `${totalDays} day${totalDays === 1 ? '' : 's'}`;
+  };
 
   const handlePrimary = () => {
     if (isAdd) {
       onAdd({
         name: nameText.trim() || supply.name,
         qty: safeQty,
-        containerSize: safeContainerSize,
         unit: unitText.trim() || supply.unit,
         amazonUrl: amazonUrl.trim(),
         thresholdType,
         thresholdQty: safeThresholdQty,
         thresholdPct: safeThresholdPct,
+        depletionMode,
+        autoDepletionRate: safeAutoRate,
+        autoDepletionUnit: autoUnit,
       });
     } else {
       onUpdate(safeQty);
@@ -1593,21 +1751,6 @@ function SupplySheet({
                     </TouchableOpacity>
                   </View>
 
-                  {/* Container Size */}
-                  <Text style={sheetStyles.fieldLabel}>
-                    How many come in a full pack?
-                  </Text>
-                  <TextInput
-                    style={sheetStyles.textInput}
-                    value={containerSizeText}
-                    onChangeText={(v) =>
-                      setContainerSizeText(v.replace(/[^0-9]/g, ''))
-                    }
-                    placeholder={String(supply.containerSize)}
-                    placeholderTextColor={Colors.textLight}
-                    keyboardType="number-pad"
-                  />
-
                   {/* Unit */}
                   <Text style={sheetStyles.fieldLabel}>
                     Unit (e.g. filters, doses, bags)
@@ -1623,13 +1766,13 @@ function SupplySheet({
 
                   {/* Purchase URL */}
                   <Text style={sheetStyles.fieldLabel}>
-                    Where do you buy this? (optional)
+                    Online Purchase Link (optional)
                   </Text>
                   <TextInput
                     style={sheetStyles.textInput}
                     value={amazonUrl}
                     onChangeText={setAmazonUrl}
-                    placeholder="Paste a link (Amazon, Walmart, etc.)"
+                    placeholder="Paste a link e.g. Amazon, Chewy, Walmart"
                     placeholderTextColor={Colors.textLight}
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -1658,7 +1801,7 @@ function SupplySheet({
                     </View>
                     <View style={sheetStyles.thresholdContent}>
                       <Text style={sheetStyles.thresholdLabel}>
-                        Alert me when I have fewer than
+                        Alert me when I reach
                       </Text>
                       <View style={sheetStyles.thresholdInputRow}>
                         <TextInput
@@ -1672,7 +1815,7 @@ function SupplySheet({
                           editable={thresholdType === 'qty'}
                         />
                         <Text style={sheetStyles.thresholdUnit}>
-                          {unitText.trim() || supply.unit} left
+                          {unitText.trim() || supply.unit} remaining
                         </Text>
                       </View>
                     </View>
@@ -1713,12 +1856,101 @@ function SupplySheet({
                       </View>
                       {thresholdType === 'pct' && safeQty > 0 ? (
                         <Text style={sheetStyles.thresholdHelper}>
-                          That's when you have fewer than {pctAsQty}{' '}
-                          {unitText.trim() || supply.unit} left
+                          That's when you reach {pctAsQty}{' '}
+                          {unitText.trim() || supply.unit} remaining
                         </Text>
                       ) : null}
                     </View>
                   </TouchableOpacity>
+
+                  {/* Depletion Mode Section */}
+                  <Text style={sheetStyles.sectionLabel}>How is this supply used?</Text>
+                  <TouchableOpacity
+                    style={[
+                      sheetStyles.modeCard,
+                      depletionMode === 'task' && sheetStyles.modeCardActive,
+                    ]}
+                    onPress={() => setDepletionMode('task')}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={sheetStyles.modeIcon}>✅</Text>
+                    <View style={sheetStyles.modeContent}>
+                      <Text style={[
+                        sheetStyles.modeTitle,
+                        depletionMode === 'task' && sheetStyles.modeTitleActive,
+                      ]}>
+                        When I complete a task
+                      </Text>
+                      <Text style={sheetStyles.modeDesc}>
+                        Supply decreases when you mark a linked task as done
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      sheetStyles.modeCard,
+                      depletionMode === 'auto' && sheetStyles.modeCardActive,
+                    ]}
+                    onPress={() => setDepletionMode('auto')}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={sheetStyles.modeIcon}>⏱️</Text>
+                    <View style={sheetStyles.modeContent}>
+                      <Text style={[
+                        sheetStyles.modeTitle,
+                        depletionMode === 'auto' && sheetStyles.modeTitleActive,
+                      ]}>
+                        Automatically over time
+                      </Text>
+                      <Text style={sheetStyles.modeDesc}>
+                        Supply decreases on a schedule without needing a task
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+
+                  {depletionMode === 'auto' ? (
+                    <View style={sheetStyles.autoSection}>
+                      <View style={sheetStyles.autoRateRow}>
+                        <Text style={sheetStyles.autoLabel}>I use</Text>
+                        <TextInput
+                          style={sheetStyles.autoRateInput}
+                          value={autoRateText}
+                          onChangeText={(v) => setAutoRateText(v.replace(/[^0-9]/g, ''))}
+                          keyboardType="number-pad"
+                          selectTextOnFocus
+                        />
+                        <Text style={sheetStyles.autoLabel}>every</Text>
+                      </View>
+                      <View style={sheetStyles.unitChipRow}>
+                        {(['day', 'week', 'month'] as AutoDepletionUnit[]).map((unit) => (
+                          <TouchableOpacity
+                            key={unit}
+                            style={[
+                              sheetStyles.unitChip,
+                              autoUnit === unit && sheetStyles.unitChipActive,
+                            ]}
+                            onPress={() => setAutoUnit(unit)}
+                            activeOpacity={0.7}
+                          >
+                            <Text
+                              style={[
+                                sheetStyles.unitChipText,
+                                autoUnit === unit && sheetStyles.unitChipTextActive,
+                              ]}
+                            >
+                              {unit.charAt(0).toUpperCase() + unit.slice(1)}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                      {calcDuration() ? (
+                        <Text style={sheetStyles.durationHint}>
+                          At this rate, your {safeQty} {unitText.trim() || supply.unit} will last {calcDuration()}
+                        </Text>
+                      ) : null}
+                    </View>
+                  ) : null}
                 </>
               ) : (
                 <>
@@ -2007,16 +2239,111 @@ const sheetStyles = StyleSheet.create({
     fontStyle: 'italic',
     marginTop: 8,
   },
+  modeCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    backgroundColor: Colors.screenBackground,
+    marginBottom: 10,
+    gap: 12,
+  },
+  modeCardActive: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.primaryLight,
+  },
+  modeIcon: {
+    fontSize: 24,
+    marginTop: 2,
+  },
+  modeContent: {
+    flex: 1,
+  },
+  modeTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+    marginBottom: 4,
+  },
+  modeTitleActive: {
+    color: Colors.primary,
+  },
+  modeDesc: {
+    fontSize: 13,
+    color: Colors.textMuted,
+    lineHeight: 18,
+  },
+  autoSection: {
+    padding: 14,
+    backgroundColor: Colors.primaryLight,
+    borderRadius: 10,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  autoRateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  autoLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+  },
+  autoRateInput: {
+    width: 50,
+    height: 40,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    fontSize: 16,
+    textAlign: 'center',
+    backgroundColor: Colors.cardBackground,
+    color: Colors.textPrimary,
+  },
+  unitChipRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  unitChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.cardBackground,
+  },
+  unitChipActive: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.primary,
+  },
+  unitChipText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+  },
+  unitChipTextActive: {
+    color: '#FFFFFF',
+  },
+  durationHint: {
+    marginTop: 12,
+    fontSize: 13,
+    color: Colors.primary,
+    fontWeight: '600',
+    fontStyle: 'italic',
+  },
 });
 
 // ----- Step 3: Done -----
 function Step3Done({
-  mode,
   taskCount,
   supplyCount,
   onDone,
 }: {
-  mode: SetupWizardMode;
   taskCount: number;
   supplyCount: number;
   onDone: () => void;
@@ -2025,7 +2352,7 @@ function Step3Done({
     taskCount === 0 && supplyCount === 0
       ? "We're ready when you are."
       : `Added ${taskCount} ${taskCount === 1 ? 'task' : 'tasks'} and ${supplyCount} ${supplyCount === 1 ? 'supply' : 'supplies'} to your household`;
-  const buttonLabel = mode === 'firstTime' ? "Let's go!" : 'Done';
+  const buttonLabel = "Let's go!";
 
   return (
     <>

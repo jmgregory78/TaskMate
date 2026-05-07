@@ -109,9 +109,7 @@ export default function CompleteTaskSheet({
               }
 
               const after = projectedAfter(product, usage.usageAmount);
-              const newPercent = stockPercent(after);
-              const containerSize =
-                product.containerSize > 0 ? product.containerSize : 1;
+              const newPercent = stockPercent(after, product.currentQuantity);
               const remainingApps = Math.floor(
                 after.currentQuantity / Math.max(usage.usageAmount, 0.0001)
               );
@@ -136,9 +134,7 @@ export default function CompleteTaskSheet({
                     <InventoryBar product={after} showLabel={false} />
                   </View>
                   <Text style={styles.afterText}>
-                    New level: {after.currentQuantity.toFixed(
-                      containerSize >= 10 ? 0 : 1
-                    )}{' '}
+                    New level: {after.currentQuantity % 1 === 0 ? after.currentQuantity : after.currentQuantity.toFixed(1)}{' '}
                     {product.containerUnit} ({remainingApps} more{' '}
                     {remainingApps === 1 ? 'use' : 'uses'})
                   </Text>

@@ -8,6 +8,10 @@ interface AppState {
   setCurrentHouseholdId: (id: string | null) => void;
   showOnboarding: boolean;
   setShowOnboarding: (show: boolean) => void;
+  // Task IDs that should trigger TaskAlertModal (from notifications or expired snoozes)
+  pendingAlertTaskIds: string[];
+  setPendingAlertTaskIds: (ids: string[]) => void;
+  clearPendingAlertTaskIds: () => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -17,4 +21,7 @@ export const useAppStore = create<AppState>((set) => ({
   setCurrentHouseholdId: (id) => set({ currentHouseholdId: id }),
   showOnboarding: false,
   setShowOnboarding: (show) => set({ showOnboarding: show }),
+  pendingAlertTaskIds: [],
+  setPendingAlertTaskIds: (ids) => set({ pendingAlertTaskIds: ids }),
+  clearPendingAlertTaskIds: () => set({ pendingAlertTaskIds: [] }),
 }));

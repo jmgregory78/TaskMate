@@ -7,6 +7,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Platform,
+  StatusBar,
 } from 'react-native';
 import {
   RouteProp,
@@ -18,8 +19,7 @@ import DateTimePicker, {
   DateTimePickerEvent,
 } from '@react-native-community/datetimepicker';
 import ScreenWrapper from '../../components/ScreenWrapper';
-import InventoryBar from '../../components/InventoryBar';
-import { Product, stockPercent } from '../../types/models';
+import { Product } from '../../types/models';
 import {
   confirmPurchase,
   getProduct,
@@ -66,7 +66,7 @@ export default function LogPurchaseScreen() {
         } else {
           setProduct(p);
           setPriceText(p.lastPurchasePrice ? String(p.lastPurchasePrice) : '');
-          setQuantityText(String(p.containerSize || 1));
+          setQuantityText('');
         }
         setLoading(false);
       })
@@ -147,10 +147,9 @@ export default function LogPurchaseScreen() {
 
   if (!product || !previewProduct) return null;
 
-  const newPercent = stockPercent(previewProduct);
-
   return (
     <>
+    <StatusBar barStyle="dark-content" />
     <ScreenWrapper contentContainerStyle={styles.content}>
       <View style={styles.headerRow}>
         <TouchableOpacity
@@ -178,16 +177,12 @@ export default function LogPurchaseScreen() {
       <Text style={styles.label}>
         How many {product.containerUnit || 'units'} did you buy?
       </Text>
-      <Text style={styles.helperText}>
-        Enter the number of {product.containerUnit || 'units'}, not packs.
-        {product.containerSize > 0 && ` A full pack contains ${product.containerSize} ${product.containerUnit || 'units'}.`}
-      </Text>
       <TextInput
         style={styles.input}
         value={quantityText}
         onChangeText={setQuantityText}
         keyboardType="number-pad"
-        placeholder={String(product.containerSize || 1)}
+        placeholder="e.g. 10"
         placeholderTextColor={Colors.textLight}
       />
 
@@ -214,22 +209,14 @@ export default function LogPurchaseScreen() {
       <View style={styles.previewRow}>
         <View style={styles.previewCol}>
           <Text style={styles.previewLabel}>Before</Text>
-          <View style={styles.previewBefore}>
-            <InventoryBar product={product} showLabel={false} />
-          </View>
-          <Text style={styles.previewSubLabel}>{stockPercent(product)}%</Text>
+          <Text style={styles.previewQty}>{product.currentQuantity} {product.containerUnit}</Text>
         </View>
         <Text style={styles.arrow}>→</Text>
         <View style={styles.previewCol}>
           <Text style={styles.previewLabel}>After</Text>
-          <InventoryBar product={previewProduct} showLabel={false} />
-          <Text style={styles.previewSubLabel}>{newPercent}%</Text>
+          <Text style={styles.previewQty}>{previewProduct.currentQuantity} {previewProduct.containerUnit}</Text>
         </View>
       </View>
-      <Text style={styles.previewSummary}>
-        New level: {newPercent}% · {previewProduct.currentQuantity}{' '}
-        {previewProduct.containerUnit} on hand
-      </Text>
 
       <View style={styles.confirmationBox}>
         <Text style={styles.confirmationText}>
@@ -360,25 +347,15 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     marginBottom: 6,
   },
-  previewSubLabel: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginTop: 4,
-    fontWeight: '600',
-  },
-  previewBefore: {
-    opacity: 0.5,
+  previewQty: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.textPrimary,
   },
   arrow: {
     fontSize: 20,
     color: Colors.textLight,
     marginHorizontal: 4,
-  },
-  previewSummary: {
-    fontSize: 14,
-    color: Colors.urgencyGreen,
-    fontWeight: '600',
-    marginTop: 12,
   },
   confirmationBox: {
     backgroundColor: Colors.primaryLight,

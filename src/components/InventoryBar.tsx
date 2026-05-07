@@ -5,26 +5,25 @@ import { Colors } from '../constants/colors';
 
 interface Props {
   product: Product;
+  maxQuantity?: number;
   showLabel?: boolean;
   compact?: boolean;
 }
 
-function calculatePercent(product: Product): number {
-  // Use containerSize as the max (100% when full)
-  // If containerSize is not set or 0, show 100% (full green)
-  if (!product.containerSize || product.containerSize <= 0) {
+function calculatePercent(product: Product, maxQuantity: number): number {
+  // Use maxQuantity as the max (100% when full)
+  // If maxQuantity is not set or 0, show 100% (full green)
+  if (!maxQuantity || maxQuantity <= 0) {
     return 100;
   }
   // Cap at 100% - never show more than full
   return Math.min(
     100,
-    Math.round((product.currentQuantity / product.containerSize) * 100)
+    Math.round((product.currentQuantity / maxQuantity) * 100)
   );
 }
 
-function colorForStock(product: Product, percent: number): string {
-  const containerSize = product.containerSize || 1;
-
+function colorForStock(product: Product, maxQuantity: number): string {
   // Determine effective threshold quantity
   let thresholdQty: number;
   if (
@@ -34,11 +33,11 @@ function colorForStock(product: Product, percent: number): string {
     thresholdQty = product.lowThresholdQty;
   } else {
     // Convert percentage threshold to quantity
-    thresholdQty = (product.lowThresholdPercent / 100) * containerSize;
+    thresholdQty = (product.lowThresholdPercent / 100) * maxQuantity;
   }
 
   // Red: critically low - 1 unit remaining or below 10%, whichever is higher
-  const criticalQty = Math.max(1, containerSize * 0.1);
+  const criticalQty = Math.max(1, maxQuantity * 0.1);
   if (product.currentQuantity <= criticalQty) {
     return Colors.urgencyRed;
   }
@@ -54,10 +53,13 @@ function colorForStock(product: Product, percent: number): string {
 
 export default function InventoryBar({
   product,
+  maxQuantity,
   showLabel = true,
   compact = false,
 }: Props) {
-  const percent = calculatePercent(product);
+  // Use provided maxQuantity, or fall back to currentQuantity (100% if no history)
+  const effectiveMax = maxQuantity && maxQuantity > 0 ? maxQuantity : product.currentQuantity;
+  const percent = calculatePercent(product, effectiveMax);
   const animated = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -83,7 +85,7 @@ export default function InventoryBar({
             styles.fill,
             {
               width: widthInterpolated,
-              backgroundColor: colorForStock(product, percent),
+              backgroundColor: colorForStock(product, effectiveMax),
             },
           ]}
         />

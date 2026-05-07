@@ -23,6 +23,7 @@ import { getHousehold } from '../../services/householdService';
 import {
   getNotificationPrefs,
   scheduleAllTaskReminders,
+  scheduleSnoozeNotification,
 } from '../../services/notificationService';
 import { Product, stockPercent, Task } from '../../types/models';
 import { getFirstName } from '../../utils/nameUtils';
@@ -148,6 +149,8 @@ export default function HomeScreen() {
   const navigation = useNavigation<any>();
   const householdId = useAppStore((s) => s.currentHouseholdId);
   const currentUser = useAppStore((s) => s.currentUser);
+  const pendingAlertTaskIds = useAppStore((s) => s.pendingAlertTaskIds);
+  const clearPendingAlertTaskIds = useAppStore((s) => s.clearPendingAlertTaskIds);
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -203,6 +206,29 @@ export default function HomeScreen() {
       };
     }, [householdId])
   );
+
+  // Handle pending alert task IDs from notifications or expired snoozes
+  useEffect(() => {
+    if (pendingAlertTaskIds.length === 0 || tasks.length === 0) return;
+
+    // Find the tasks that match the pending IDs
+    const pendingTasks = tasks.filter(
+      (t) => pendingAlertTaskIds.includes(t.id) && !t.completedToday
+    );
+
+    if (pendingTasks.length > 0) {
+      // Merge with existing urgent tasks (avoiding duplicates)
+      setUrgentTasks((prev) => {
+        const existingIds = new Set(prev.map((t) => t.id));
+        const newTasks = pendingTasks.filter((t) => !existingIds.has(t.id));
+        return [...prev, ...newTasks];
+      });
+      setShowAlert(true);
+    }
+
+    // Clear the pending IDs after processing
+    clearPendingAlertTaskIds();
+  }, [pendingAlertTaskIds, tasks, clearPendingAlertTaskIds]);
 
   const today = new Date();
   const firstName = getFirstName(
@@ -273,8 +299,17 @@ export default function HomeScreen() {
             })();
 
     try {
-      await snoozeTask(householdId, task.id, snoozeDate);
+      // Schedule snooze notification (cancels any existing one first)
+      const notificationId = await scheduleSnoozeNotification(
+        task,
+        snoozeDate,
+        householdId
+      );
 
+      // Save snooze time and notification ID to Firestore
+      await snoozeTask(householdId, task.id, snoozeDate, notificationId);
+
+      // Reschedule regular task reminders
       const allTasks = await getTasks(householdId);
       const prefs = await getNotificationPrefs(currentUser.uid);
       if (prefs.enabled) {
@@ -286,22 +321,12 @@ export default function HomeScreen() {
           prefs.reminderMinute
         );
       }
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: `${task.icon || '📋'} ${task.name}`,
-          body: 'Snoozed reminder — this task is still due!',
-          data: { taskId: task.id, householdId },
-          sound: true,
-        },
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.DATE,
-          date: snoozeDate,
-        },
-      });
 
       setTasks((prev) =>
         prev.map((t) =>
-          t.id === task.id ? { ...t, snoozedUntil: snoozeDate } : t
+          t.id === task.id
+            ? { ...t, snoozedUntil: snoozeDate, pendingNotificationId: notificationId }
+            : t
         )
       );
       removeUrgent(task.id);

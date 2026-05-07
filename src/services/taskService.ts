@@ -15,6 +15,7 @@ import {
   where,
   Unsubscribe,
 } from 'firebase/firestore';
+import * as Notifications from 'expo-notifications';
 import { db } from '../config/firebase';
 import { computeNextDueDate } from '../utils/recurrence';
 import {
@@ -45,6 +46,7 @@ type CreateTaskInput = Omit<
   | 'assignedAt'
   | 'assignedBy'
   | 'snoozedUntil'
+  | 'pendingNotificationId'
 > & {
   assignedTo?: string | null;
   assignedToName?: string | null;
@@ -139,6 +141,7 @@ function mapTaskDoc(id: string, data: any): Task {
           ? data.reminderDaysBefore
           : 1,
     snoozedUntil: toDateOrNull(data.snoozedUntil),
+    pendingNotificationId: data.pendingNotificationId ?? null,
   };
 }
 
@@ -292,11 +295,18 @@ export async function updateTask(
 export async function snoozeTask(
   householdId: string,
   taskId: string,
-  snoozedUntil: Date
+  snoozedUntil: Date,
+  pendingNotificationId?: string | null
 ): Promise<void> {
+  const payload: Record<string, unknown> = {
+    snoozedUntil: Timestamp.fromDate(snoozedUntil),
+  };
+  if (pendingNotificationId !== undefined) {
+    payload.pendingNotificationId = pendingNotificationId;
+  }
   await updateDoc(
     doc(db, 'households', householdId, 'tasks', taskId),
-    { snoozedUntil: Timestamp.fromDate(snoozedUntil) }
+    payload
   );
 }
 
@@ -331,6 +341,16 @@ export async function completeTask(
 ): Promise<Date> {
   const task = await getTask(householdId, taskId);
   if (!task) throw new Error('Task not found');
+
+  // Cancel any pending snooze notification for this task
+  if (task.pendingNotificationId) {
+    try {
+      await Notifications.cancelScheduledNotificationAsync(task.pendingNotificationId);
+    } catch (e) {
+      console.warn('[completeTask] Failed to cancel pending notification:', e);
+    }
+  }
+
   const completedAt = new Date();
   const nextDueDate = computeNextDueDate(completedAt, task.recurrence);
   const ref = doc(db, 'households', householdId, 'tasks', taskId);
@@ -340,6 +360,8 @@ export async function completeTask(
     completedAt: Timestamp.fromDate(completedAt),
     completedToday: true,
     nextDueDate: Timestamp.fromDate(nextDueDate),
+    snoozedUntil: null,
+    pendingNotificationId: null,
   });
   await logActivity(householdId, taskId, 'completed', userId, note);
 
@@ -348,7 +370,7 @@ export async function completeTask(
     const usages = await getProductUsagesForTask(householdId, taskId);
     await Promise.all(
       usages.map((usage) =>
-        deductProductUsage(householdId, usage.productId, usage.usageAmount)
+        deductProductUsage(householdId, usage.productId, usage.usageAmount, task.name)
       )
     );
   } catch (e) {
@@ -418,4 +440,19 @@ export function subscribeToTasks(
       onError?.(error);
     }
   );
+}
+
+/**
+ * Get tasks where snooze has expired (snoozedUntil <= now) and not completed today.
+ * Used to show TaskAlertModal when app becomes active.
+ */
+export async function getExpiredSnoozedTasks(householdId: string): Promise<Task[]> {
+  const now = new Date();
+  const allTasks = await getTasks(householdId);
+  return allTasks.filter((task) => {
+    if (task.completedToday) return false;
+    if (!task.snoozedUntil) return false;
+    // Snooze has expired if snoozedUntil is in the past
+    return task.snoozedUntil.getTime() <= now.getTime();
+  });
 }
