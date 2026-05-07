@@ -510,6 +510,16 @@ export async function deductProductUsage(
   const current = Number(data.currentQuantity) || 0;
   const containerUnit = String(data.containerUnit ?? '');
   const next = Math.max(0, current - amount);
+
+  console.log('[productService] Deducting product usage:', {
+    productId,
+    productName: data.name,
+    previousQuantity: current,
+    amountDeducted: amount,
+    newQuantity: next,
+    taskName,
+  });
+
   await updateDoc(productRef, { currentQuantity: next });
 
   // Add history record for task completion
@@ -519,6 +529,7 @@ export async function deductProductUsage(
       eventType: 'task_completion',
       note: taskName ? `${taskName} completed` : `Used ${amount} ${containerUnit}`,
     });
+    console.log('[productService] History record added for task completion');
   } catch (e) {
     console.warn('[productService] Failed to add task completion history record:', e);
   }

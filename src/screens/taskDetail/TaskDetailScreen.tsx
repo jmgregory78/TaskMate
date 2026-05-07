@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   ScrollView,
   Alert,
-  Linking,
 } from 'react-native';
 import {
   useFocusEffect,
@@ -21,7 +20,9 @@ import { useAppStore } from '../../stores/appStore';
 import {
   assignTask,
   completeTask,
+  dismissNextTimeReminder,
   getActivityLog,
+  getCompletions,
   getTask,
   getTasks,
   snoozeTask,
@@ -30,7 +31,6 @@ import {
 import { getFirstName } from '../../utils/nameUtils';
 import { sendAssignmentNotification } from '../../services/notificationService';
 import {
-  deductProductUsage,
   flagPurchasePending,
   getProducts,
   getProductUsagesForTask,
@@ -41,6 +41,7 @@ import {
   Product,
   Task,
   TaskActivity,
+  TaskCompletion,
   TaskProductUsage,
 } from '../../types/models';
 import InventoryBar from '../../components/InventoryBar';
@@ -55,6 +56,7 @@ import {
 import { reminderLabel } from '../../components/ReminderPicker';
 import SnoozeSheet, { SnoozeUnit } from '../../components/SnoozeSheet';
 import PurchaseLinkSheet from '../../components/PurchaseLinkSheet';
+import CompletionNoteModal from '../../components/CompletionNoteModal';
 import { openPurchaseUrl } from '../../utils/purchaseLink';
 import * as Notifications from 'expo-notifications';
 import { getNotificationPrefs, scheduleAllTaskReminders } from '../../services/notificationService';
@@ -167,6 +169,10 @@ export default function TaskDetailScreen() {
   const [snoozeConfirmation, setSnoozeConfirmation] = useState<string | null>(
     null
   );
+  const [completions, setCompletions] = useState<TaskCompletion[]>([]);
+  const [showAllHistory, setShowAllHistory] = useState(false);
+  const [completionNoteModalVisible, setCompletionNoteModalVisible] =
+    useState(false);
 
   const currentAssignee = useMemo<Assignee | null>(() => {
     if (!task?.assignedTo) return null;
@@ -187,13 +193,15 @@ export default function TaskDetailScreen() {
         getProductUsagesForTask(householdId, taskId),
         getProducts(householdId),
         getActivityLog(householdId, taskId),
+        getCompletions(householdId, taskId),
       ])
-        .then(([t, usages, allProducts, activityLog]) => {
+        .then(([t, usages, allProducts, activityLog, completionHistory]) => {
           if (cancelled) return;
           setTask(t);
           setProductUsages(usages);
           setProducts(allProducts);
           setActivity(activityLog);
+          setCompletions(completionHistory);
           setLoading(false);
         })
         .catch((e) => {
@@ -240,32 +248,39 @@ export default function TaskDetailScreen() {
 
   const refreshTask = async () => {
     if (!householdId) return;
-    const [refreshed, refreshedUsages, refreshedProducts, refreshedActivity] =
-      await Promise.all([
-        getTask(householdId, taskId),
-        getProductUsagesForTask(householdId, taskId),
-        getProducts(householdId),
-        getActivityLog(householdId, taskId),
-      ]);
+    const [
+      refreshed,
+      refreshedUsages,
+      refreshedProducts,
+      refreshedActivity,
+      refreshedCompletions,
+    ] = await Promise.all([
+      getTask(householdId, taskId),
+      getProductUsagesForTask(householdId, taskId),
+      getProducts(householdId),
+      getActivityLog(householdId, taskId),
+      getCompletions(householdId, taskId),
+    ]);
     if (refreshed) setTask(refreshed);
     setProductUsages(refreshedUsages);
     setProducts(refreshedProducts);
     setActivity(refreshedActivity);
+    setCompletions(refreshedCompletions);
     return refreshed;
   };
 
-  const runComplete = async (deductInventory: boolean) => {
+  // State to hold the completed task info for the note modal
+  const [completedTaskForNote, setCompletedTaskForNote] = useState<{
+    name: string;
+    icon: string;
+  } | null>(null);
+
+  const runCompleteTask = async (deductInventory: boolean) => {
     if (!task || !user || !householdId || actionPending) return;
     setActionPending(true);
     try {
-      if (deductInventory) {
-        await Promise.all(
-          productUsages.map((usage) =>
-            deductProductUsage(householdId, usage.productId, usage.usageAmount, task.name)
-          )
-        );
-      }
-      const note =
+      // Build activity note if deducting inventory
+      const activityNote =
         deductInventory && productUsages.length > 0
           ? `Used ${productUsages
               .map(
@@ -274,11 +289,21 @@ export default function TaskDetailScreen() {
               )
               .join(', ')}`
           : undefined;
+
+      const displayName = user.displayName ?? user.email ?? user.uid;
+
+      // Complete the task FIRST - no note yet
       await completeTask(
         householdId,
         taskId,
-        user.displayName ?? user.email ?? user.uid,
-        note
+        user.uid,
+        activityNote,
+        {
+          completionNote: '',
+          remindNextTime: false,
+          displayName,
+          skipInventoryDeduction: !deductInventory,
+        }
       );
 
       // Clear any active snooze and cancel its scheduled notification(s).
@@ -291,10 +316,20 @@ export default function TaskDetailScreen() {
       }
       await cancelTaskNotifications(taskId);
 
+      // Task completed successfully - now show overlay and note modal
       setSheetVisible(false);
       setOverlayTaskName(task.name);
       setOverlayTaskIcon(task.icon ?? '📋');
+      setCompletedTaskForNote({ name: task.name, icon: task.icon ?? '📋' });
       setOverlayVisible(true);
+
+      // Show the note modal after a short delay to let overlay appear
+      console.log('[TaskDetailScreen] Showing completion note modal for task:', taskId);
+      setTimeout(() => {
+        console.log('[TaskDetailScreen] Setting completionNoteModalVisible to true');
+        setCompletionNoteModalVisible(true);
+      }, 300);
+
       void refreshTask();
     } catch (e) {
       const err = e as { message?: string };
@@ -304,21 +339,62 @@ export default function TaskDetailScreen() {
     }
   };
 
+  const saveCompletionNote = async (note: string, remindNextTime: boolean) => {
+    if (!householdId || !completedTaskForNote) return;
+    try {
+      // Update the task with the note
+      await updateTask(householdId, taskId, {
+        lastCompletionNote: note || undefined,
+        nextTimeReminder: remindNextTime ? note : undefined,
+      });
+      void refreshTask();
+    } catch (e) {
+      console.warn('[TaskDetail] save completion note failed:', e);
+    }
+  };
+
   const handleOverlayDismiss = () => {
     setOverlayVisible(false);
+    setCompletedTaskForNote(null);
     (navigation as any).navigate('Main', { screen: 'Tasks' });
   };
 
   const handleConfirmComplete = () => {
-    void runComplete(true);
+    // Complete the task immediately (with inventory deduction)
+    void runCompleteTask(true);
   };
 
   const handleConfirmWithoutLogging = () => {
-    void runComplete(false);
+    // Complete the task immediately (without inventory deduction)
+    void runCompleteTask(false);
   };
 
   const handleCancelComplete = () => {
     setSheetVisible(false);
+  };
+
+  const handleCompletionNoteSave = (note: string, remindNextTime: boolean) => {
+    setCompletionNoteModalVisible(false);
+    // Save the note to the already-completed task
+    void saveCompletionNote(note, remindNextTime);
+  };
+
+  const handleCompletionNoteSkip = () => {
+    setCompletionNoteModalVisible(false);
+    // No note to save, just dismiss
+    setCompletedTaskForNote(null);
+  };
+
+  const handleDismissReminder = async () => {
+    if (!householdId) return;
+    try {
+      await dismissNextTimeReminder(householdId, taskId);
+      setTask((prev) =>
+        prev ? { ...prev, nextTimeReminder: undefined } : prev
+      );
+    } catch (e) {
+      console.warn('[TaskDetail] dismiss reminder failed:', e);
+    }
   };
 
   const handleSnooze = async (amount: number, unit: SnoozeUnit) => {
@@ -571,6 +647,32 @@ export default function TaskDetailScreen() {
         </View>
       ) : null}
 
+      {task.nextTimeReminder ? (
+        <View style={styles.nextTimeReminderCard}>
+          <View style={styles.nextTimeReminderContent}>
+            <Text style={styles.nextTimeReminderHeader}>
+              📝 Note from last time:
+            </Text>
+            <Text style={styles.nextTimeReminderText}>
+              {task.nextTimeReminder}
+            </Text>
+            {task.lastCompletedAt ? (
+              <Text style={styles.nextTimeReminderDate}>
+                Completed {format(task.lastCompletedAt, 'MMMM yyyy')}
+              </Text>
+            ) : null}
+          </View>
+          <TouchableOpacity
+            style={styles.nextTimeReminderDismiss}
+            onPress={handleDismissReminder}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            activeOpacity={0.6}
+          >
+            <Text style={styles.nextTimeReminderDismissText}>Dismiss</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
       <View style={styles.titleBlock}>
         <Text style={styles.icon}>{task.icon ?? '📋'}</Text>
         <Text style={styles.taskName}>{task.name}</Text>
@@ -725,6 +827,43 @@ export default function TaskDetailScreen() {
         </TouchableOpacity>
       </View>
 
+      {task.notes ? (
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionHeader}>Notes</Text>
+            <TouchableOpacity
+              style={styles.editNotesLink}
+              onPress={() => {
+                if (!householdId) return;
+                (navigation as any).navigate('EditTask', {
+                  taskId,
+                  householdId,
+                });
+              }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.editNotesLinkText}>Edit</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.notesText}>{task.notes}</Text>
+        </View>
+      ) : (
+        <TouchableOpacity
+          style={styles.addNotesLink}
+          onPress={() => {
+            if (!householdId) return;
+            (navigation as any).navigate('EditTask', {
+              taskId,
+              householdId,
+            });
+          }}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.addNotesLinkText}>+ Add notes</Text>
+        </TouchableOpacity>
+      )}
+
       <View style={styles.section}>
         <Text style={styles.sectionHeader}>Activity</Text>
         {activity.length === 0 ? (
@@ -756,6 +895,51 @@ export default function TaskDetailScreen() {
               </View>
             </View>
           ))
+        )}
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionHeader}>History</Text>
+        {completions.length === 0 ? (
+          <Text style={[styles.placeholderText, styles.historyEmpty]}>
+            No completion history yet
+          </Text>
+        ) : (
+          <>
+            {(showAllHistory ? completions : completions.slice(0, 5)).map(
+              (c, idx, arr) => (
+                <View
+                  key={c.id}
+                  style={[
+                    styles.historyRow,
+                    idx < arr.length - 1 && styles.historyRowDivider,
+                  ]}
+                >
+                  <Text style={styles.historyIcon}>✅</Text>
+                  <View style={styles.historyBody}>
+                    <Text style={styles.historyMeta}>
+                      {format(c.completedAt, 'MMMM d, yyyy')} ·{' '}
+                      {getFirstName(c.displayName)}
+                    </Text>
+                    {c.note ? (
+                      <Text style={styles.historyNote}>"{c.note}"</Text>
+                    ) : null}
+                  </View>
+                </View>
+              )
+            )}
+            {completions.length > 5 && !showAllHistory ? (
+              <TouchableOpacity
+                style={styles.viewAllHistoryLink}
+                onPress={() => setShowAllHistory(true)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.viewAllHistoryText}>
+                  View all history ({completions.length} completions)
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+          </>
         )}
       </View>
 
@@ -814,6 +998,13 @@ export default function TaskDetailScreen() {
         product={linkSheetProduct}
         householdId={householdId}
         onClose={handleLinkSheetClose}
+      />
+      <CompletionNoteModal
+        visible={completionNoteModalVisible}
+        taskName={completedTaskForNote?.name ?? task.name}
+        taskIcon={completedTaskForNote?.icon ?? task.icon}
+        onSave={handleCompletionNoteSave}
+        onSkip={handleCompletionNoteSkip}
       />
     </>
   );
@@ -1203,6 +1394,124 @@ const styles = StyleSheet.create({
   linkButtonText: {
     color: Colors.primary,
     fontSize: 16,
+    fontWeight: '600',
+  },
+  // Next time reminder card (amber)
+  nextTimeReminderCard: {
+    flexDirection: 'row',
+    backgroundColor: '#FEF3C7',
+    borderRadius: 12,
+    marginHorizontal: 16,
+    marginTop: 12,
+    padding: 14,
+    borderLeftWidth: 4,
+    borderLeftColor: '#F59E0B',
+  },
+  nextTimeReminderContent: {
+    flex: 1,
+  },
+  nextTimeReminderHeader: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#92400E',
+    marginBottom: 6,
+  },
+  nextTimeReminderText: {
+    fontSize: 14,
+    color: '#78350F',
+    lineHeight: 20,
+    marginBottom: 6,
+  },
+  nextTimeReminderDate: {
+    fontSize: 12,
+    color: '#B45309',
+  },
+  nextTimeReminderDismiss: {
+    paddingLeft: 12,
+  },
+  nextTimeReminderDismissText: {
+    fontSize: 12,
+    color: '#92400E',
+    fontWeight: '600',
+  },
+  // Notes section
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  notesText: {
+    fontSize: 15,
+    color: Colors.textPrimary,
+    lineHeight: 22,
+  },
+  editNotesLink: {
+    padding: 4,
+  },
+  editNotesLinkText: {
+    color: Colors.primary,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  addNotesLink: {
+    marginTop: 16,
+    marginHorizontal: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+  },
+  addNotesLinkText: {
+    color: Colors.textMuted,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  // History section
+  historyEmpty: {
+    textAlign: 'center',
+    paddingVertical: 12,
+  },
+  historyRow: {
+    flexDirection: 'row',
+    paddingVertical: 12,
+  },
+  historyRowDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  historyIcon: {
+    fontSize: 16,
+    marginRight: 10,
+    marginTop: 2,
+  },
+  historyBody: {
+    flex: 1,
+  },
+  historyMeta: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+    marginBottom: 4,
+  },
+  historyNote: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    fontStyle: 'italic',
+    lineHeight: 20,
+  },
+  viewAllHistoryLink: {
+    marginTop: 8,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  viewAllHistoryText: {
+    color: Colors.primary,
+    fontSize: 14,
     fontWeight: '600',
   },
 });

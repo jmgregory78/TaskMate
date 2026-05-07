@@ -112,6 +112,19 @@ export interface Task {
   reminderDaysBefore: number | null;
   snoozedUntil: Date | null;
   pendingNotificationId: string | null;
+  // Notes fields
+  notes?: string;
+  nextTimeReminder?: string;
+  lastCompletionNote?: string;
+}
+
+export interface TaskCompletion {
+  id: string;
+  completedAt: Date;
+  completedBy: string;
+  displayName: string;
+  note: string;
+  remindNextTime: boolean;
 }
 
 export type DepletionMode = 'task' | 'auto';

@@ -45,12 +45,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 interface TimelineTask {
   task: Task;
   hasLowStockSupply: boolean;
+  isCompletedToday?: boolean;
 }
 
 interface TimelineSection {
   key: string;
   title: string;
-  variant: 'attention' | 'week' | 'month' | 'future';
+  variant: 'attention' | 'week' | 'month' | 'future' | 'completedToday';
   data: TimelineTask[];
 }
 
@@ -104,23 +105,76 @@ function TaskCard({
   item,
   onPress,
   isNeedsAttention,
+  isCompletedToday,
 }: {
   item: TimelineTask;
   onPress: () => void;
   isNeedsAttention: boolean;
+  isCompletedToday?: boolean;
 }) {
   const { task, hasLowStockSupply } = item;
   const today = startOfDay(new Date());
   const days = differenceInCalendarDays(task.nextDueDate, today);
-  const isOverdue = days < 0;
-  // In upcoming sections, don't show "completed" styling - we're showing the next occurrence
-  const isCompleted = false;
+  const isOverdue = days < 0 && !isCompletedToday;
+  const isCompleted = isCompletedToday ?? false;
 
-  const borderColor = isOverdue
-    ? Colors.urgencyRed
-    : isNeedsAttention
-      ? Colors.primary
-      : Colors.border;
+  const borderColor = isCompleted
+    ? Colors.successBorder
+    : isOverdue
+      ? Colors.urgencyRed
+      : isNeedsAttention
+        ? Colors.primary
+        : Colors.border;
+
+  const cardContent = (
+    <View style={styles.cardContent}>
+      {/* Icon box */}
+      <View style={[styles.iconBox, isCompleted && styles.iconBoxCompleted]}>
+        <Text style={styles.iconText}>{task.icon ?? '📋'}</Text>
+      </View>
+
+      {/* Main content */}
+      <View style={styles.cardMain}>
+        <View style={styles.cardTopRow}>
+          <View style={styles.taskNameRow}>
+            <Text
+              style={[styles.taskName, isCompleted && styles.taskNameCompleted]}
+              numberOfLines={1}
+            >
+              {task.name}
+            </Text>
+            {hasLowStockSupply && !isCompleted && (
+              <Text style={styles.lowStockIndicator}>🔸</Text>
+            )}
+          </View>
+          {!isCompleted && <DateChip days={days} dueDate={task.nextDueDate} />}
+          {isCompleted && (
+            <View style={[styles.chip, styles.chipCompleted]}>
+              <Text style={styles.chipTextCompleted}>Done ✓</Text>
+            </View>
+          )}
+        </View>
+        <Text style={styles.recurrenceText}>
+          {recurrenceShortLabel(task.recurrence)}
+        </Text>
+      </View>
+    </View>
+  );
+
+  // Completed tasks are not tappable (or show read-only completion detail)
+  if (isCompleted) {
+    return (
+      <View
+        style={[
+          styles.card,
+          styles.cardCompletedToday,
+          { borderLeftColor: borderColor },
+        ]}
+      >
+        {cardContent}
+      </View>
+    );
+  }
 
   return (
     <TouchableOpacity
@@ -128,43 +182,11 @@ function TaskCard({
         styles.card,
         { borderLeftColor: borderColor },
         isOverdue && styles.cardOverdue,
-        isCompleted && styles.cardCompleted,
       ]}
       onPress={onPress}
       activeOpacity={0.7}
     >
-      <View style={styles.cardContent}>
-        {/* Icon box */}
-        <View style={[styles.iconBox, isCompleted && styles.iconBoxCompleted]}>
-          <Text style={styles.iconText}>{task.icon ?? '📋'}</Text>
-        </View>
-
-        {/* Main content */}
-        <View style={styles.cardMain}>
-          <View style={styles.cardTopRow}>
-            <View style={styles.taskNameRow}>
-              <Text
-                style={[styles.taskName, isCompleted && styles.taskNameCompleted]}
-                numberOfLines={1}
-              >
-                {task.name}
-              </Text>
-              {hasLowStockSupply && !isCompleted && (
-                <Text style={styles.lowStockIndicator}>🔸</Text>
-              )}
-            </View>
-            {!isCompleted && <DateChip days={days} dueDate={task.nextDueDate} />}
-            {isCompleted && (
-              <View style={[styles.chip, styles.chipCompleted]}>
-                <Text style={styles.chipTextCompleted}>Done</Text>
-              </View>
-            )}
-          </View>
-          <Text style={styles.recurrenceText}>
-            {recurrenceShortLabel(task.recurrence)}
-          </Text>
-        </View>
-      </View>
+      {cardContent}
     </TouchableOpacity>
   );
 }
@@ -172,14 +194,23 @@ function TaskCard({
 // Section header component
 function TimelineSectionHeader({ section }: { section: TimelineSection }) {
   const isAttention = section.variant === 'attention';
+  const isCompletedToday = section.variant === 'completedToday';
 
   return (
-    <View style={styles.sectionHeader}>
+    <View style={[styles.sectionHeader, isCompletedToday && styles.sectionHeaderCompletedToday]}>
+      {/* Divider above for completedToday section */}
+      {isCompletedToday && <View style={styles.sectionDivider} />}
       <View style={styles.sectionHeaderContent}>
         {isAttention && <View style={styles.redDot} />}
-        <Text style={styles.sectionHeaderText}>{section.title}</Text>
+        <Text style={[
+          styles.sectionHeaderText,
+          isCompletedToday && styles.sectionHeaderTextCompleted,
+        ]}>
+          {section.title}
+        </Text>
       </View>
-      <View style={styles.sectionDivider} />
+      {/* Divider below for other sections */}
+      {!isCompletedToday && <View style={styles.sectionDivider} />}
     </View>
   );
 }
@@ -379,6 +410,7 @@ export default function TimelineScreen() {
 
     // Separate tasks into buckets
     const needsAttention: TimelineTask[] = [];
+    const completedToday: TimelineTask[] = [];
     const thisWeek: TimelineTask[] = [];
     const thisMonth: TimelineTask[] = [];
     const futureMonths = new Map<string, TimelineTask[]>();
@@ -390,13 +422,15 @@ export default function TimelineScreen() {
       const item: TimelineTask = {
         task,
         hasLowStockSupply: hasLowStockSupply(task.id),
+        isCompletedToday: task.completedToday,
       };
 
       const days = differenceInCalendarDays(task.nextDueDate, today);
 
-      // Completed tasks: don't show in Needs Attention, but do show in upcoming
-      // sections based on their updated nextDueDate (the next occurrence)
-      if (days <= 0 && !task.completedToday) {
+      // Tasks completed today: show in "COMPLETED TODAY" section
+      if (task.completedToday) {
+        completedToday.push(item);
+      } else if (days <= 0) {
         // Overdue or due today (but not completed)
         needsAttention.push(item);
       } else if (days > 0 && days <= 7) {
@@ -422,6 +456,13 @@ export default function TimelineScreen() {
       return daysA - daysB;
     });
 
+    // Sort completed today: most recently completed first
+    completedToday.sort((a, b) => {
+      const aTime = a.task.completedAt?.getTime() ?? 0;
+      const bTime = b.task.completedAt?.getTime() ?? 0;
+      return bTime - aTime;
+    });
+
     // Always show Needs Attention section (even if empty for the "all caught up" message)
     result.push({
       key: 'attention',
@@ -429,6 +470,16 @@ export default function TimelineScreen() {
       variant: 'attention',
       data: needsAttention,
     });
+
+    // Show "COMPLETED TODAY" section if there are completed tasks
+    if (completedToday.length > 0) {
+      result.push({
+        key: 'completedToday',
+        title: 'COMPLETED TODAY',
+        variant: 'completedToday',
+        data: completedToday,
+      });
+    }
 
     // This Week (only if has tasks)
     if (thisWeek.length > 0) {
@@ -504,6 +555,7 @@ export default function TimelineScreen() {
       item={item}
       onPress={() => navigation.navigate('TaskDetail', { taskId: item.task.id })}
       isNeedsAttention={section.variant === 'attention'}
+      isCompletedToday={section.variant === 'completedToday'}
     />
   );
 
@@ -675,6 +727,9 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 12,
   },
+  sectionHeaderCompletedToday: {
+    marginTop: 28,
+  },
   sectionHeaderContent: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -685,6 +740,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.textMuted,
     letterSpacing: 1.2,
+  },
+  sectionHeaderTextCompleted: {
+    color: Colors.textLight,
+    marginTop: 12,
   },
   redDot: {
     width: 8,
@@ -715,6 +774,10 @@ const styles = StyleSheet.create({
   },
   cardCompleted: {
     opacity: 0.7,
+  },
+  cardCompletedToday: {
+    opacity: 0.6,
+    borderLeftColor: Colors.successBorder,
   },
   cardContent: {
     flexDirection: 'row',

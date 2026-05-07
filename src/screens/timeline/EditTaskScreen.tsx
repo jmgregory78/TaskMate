@@ -136,6 +136,7 @@ export default function EditTaskScreen() {
 
   const [assignee, setAssignee] = useState<Assignee | null>(null);
   const [reminderDaysBefore, setReminderDaysBefore] = useState<number | null>(1);
+  const [notes, setNotes] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -181,6 +182,7 @@ export default function EditTaskScreen() {
               ? t.reminderDaysBefore
               : 1
         );
+        setNotes(t.notes ?? '');
         setLoading(false);
       })
       .catch((e) => {
@@ -228,6 +230,8 @@ export default function EditTaskScreen() {
   const trimmedName = name.trim();
   const trimmedDescription = description.trim();
 
+  const trimmedNotes = notes.trim();
+
   const dirty = useMemo(() => {
     if (!task) return false;
     if (trimmedName.length === 0) return false;
@@ -237,6 +241,7 @@ export default function EditTaskScreen() {
     if (!recurrenceEqual(buildRecurrence(), task.recurrence)) return true;
     if ((assignee?.userId ?? null) !== (task.assignedTo ?? null)) return true;
     if (reminderDaysBefore !== task.reminderDaysBefore) return true;
+    if (trimmedNotes !== (task.notes ?? '')) return true;
     return false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -254,6 +259,7 @@ export default function EditTaskScreen() {
     endByDate,
     assignee,
     reminderDaysBefore,
+    trimmedNotes,
   ]);
 
   const canSave = dirty && !submitting;
@@ -301,6 +307,9 @@ export default function EditTaskScreen() {
       }
       if (!recurrenceEqual(newRecurrence, task.recurrence)) {
         changed.recurrence = newRecurrence;
+      }
+      if (trimmedNotes !== (task.notes ?? '')) {
+        changed.notes = trimmedNotes || undefined;
       }
 
       await updateTask(householdId, taskId, changed);
@@ -675,6 +684,19 @@ export default function EditTaskScreen() {
               onSelect={setAssignee}
             />
 
+            <Text style={styles.sectionHeader}>📝 Notes</Text>
+            <View style={styles.notesCard}>
+              <TextInput
+                style={styles.notesInput}
+                placeholder="Add contractor info, model numbers, access codes, warranty details..."
+                placeholderTextColor={Colors.textLight}
+                value={notes}
+                onChangeText={setNotes}
+                multiline
+                textAlignVertical="top"
+              />
+            </View>
+
             {error ? <Text style={styles.error}>{error}</Text> : null}
 
             <DeleteRowButton
@@ -963,5 +985,18 @@ const styles = StyleSheet.create({
     marginTop: 16,
     textAlign: 'center',
     fontSize: 14,
+  },
+  notesCard: {
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 12,
+  },
+  notesInput: {
+    minHeight: 100,
+    fontSize: 15,
+    color: Colors.textPrimary,
+    lineHeight: 22,
   },
 });

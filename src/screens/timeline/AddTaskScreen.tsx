@@ -128,6 +128,8 @@ export default function AddTaskScreen() {
       : null
   );
 
+  const [notes, setNotes] = useState('');
+
   useEffect(() => {
     if (!user) return;
     setAssignee((prev) =>
@@ -279,6 +281,7 @@ export default function AddTaskScreen() {
           assignedTo: assignee?.userId ?? null,
           assignedToName: assignee?.name ?? null,
           reminderDaysBefore,
+          notes: notes.trim() || undefined,
         },
         user.uid
       );
@@ -324,16 +327,20 @@ export default function AddTaskScreen() {
             ✨ Pick from suggested tasks →
           </Text>
         </TouchableOpacity>
-        <Text style={styles.label}>Task name</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Enter task name"
-          placeholderTextColor={Colors.textLight}
-          value={name}
-          onChangeText={setName}
-          autoCapitalize="sentences"
-          autoFocus
-        />
+        <View style={styles.nameCard}>
+          <TextInput
+            style={styles.nameInput}
+            value={name}
+            onChangeText={setName}
+            placeholder="Enter task name"
+            placeholderTextColor="#9CA3AF"
+            autoFocus={true}
+            returnKeyType="done"
+            multiline={false}
+            maxLength={100}
+            autoCapitalize="sentences"
+          />
+        </View>
 
       <Text style={styles.label}>Description (optional)</Text>
       <TextInput
@@ -668,6 +675,19 @@ export default function AddTaskScreen() {
         />
       ) : null}
 
+      <Text style={styles.sectionHeader}>📝 Notes</Text>
+      <View style={styles.notesCard}>
+        <TextInput
+          style={styles.notesInput}
+          placeholder="Add contractor info, model numbers, access codes, warranty details..."
+          placeholderTextColor={Colors.textLight}
+          value={notes}
+          onChangeText={setNotes}
+          multiline
+          textAlignVertical="top"
+        />
+      </View>
+
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <TouchableOpacity
@@ -712,6 +732,22 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 24,
     paddingTop: 16,
+  },
+  nameCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  nameInput: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111827',
   },
   label: {
     fontSize: 14,
@@ -1046,5 +1082,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textMuted,
     marginTop: 2,
+  },
+  notesCard: {
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 12,
+  },
+  notesInput: {
+    minHeight: 100,
+    fontSize: 15,
+    color: Colors.textPrimary,
+    lineHeight: 22,
   },
 });

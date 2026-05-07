@@ -17,11 +17,16 @@ import { Task } from '../types/models';
 import { Colors } from '../constants/colors';
 import { recurrenceSummary } from '../utils/recurrence';
 import SnoozeSheet, { SnoozeUnit } from './SnoozeSheet';
+import CompletionNoteModal from './CompletionNoteModal';
 
 interface Props {
   tasks: Task[];
   visible: boolean;
-  onComplete: (task: Task) => void;
+  onComplete: (
+    task: Task,
+    completionNote?: string,
+    remindNextTime?: boolean
+  ) => void;
   onSnooze: (task: Task, amount: number, unit: SnoozeUnit) => void;
   onSnoozeUntilTomorrow: (task: Task) => void;
   onOpenTask: (task: Task) => void;
@@ -73,6 +78,7 @@ export default function TaskAlertModal({
   const scrollRef = useRef<ScrollView>(null);
   const [index, setIndex] = useState(0);
   const [snoozeOpen, setSnoozeOpen] = useState(false);
+  const [completionNoteOpen, setCompletionNoteOpen] = useState(false);
 
   useEffect(() => {
     if (visible) {
@@ -86,6 +92,7 @@ export default function TaskAlertModal({
       slideAnim.setValue(-300);
       setIndex(0);
       setSnoozeOpen(false);
+      setCompletionNoteOpen(false);
     }
   }, [visible, slideAnim]);
 
@@ -180,6 +187,21 @@ export default function TaskAlertModal({
                 <Text style={styles.recurrenceLabel}>
                   {recurrenceSummary(t.recurrence)}
                 </Text>
+                {t.lastCompletionNote ? (
+                  <Text style={styles.lastCompletionNote} numberOfLines={1}>
+                    Last time: {t.lastCompletionNote}
+                  </Text>
+                ) : null}
+                {t.nextTimeReminder ? (
+                  <View style={styles.reminderCard}>
+                    <Text style={styles.reminderCardHeader}>
+                      📝 Note from last time:
+                    </Text>
+                    <Text style={styles.reminderCardText} numberOfLines={2}>
+                      {t.nextTimeReminder}
+                    </Text>
+                  </View>
+                ) : null}
               </View>
             ))}
           </ScrollView>
@@ -239,7 +261,10 @@ export default function TaskAlertModal({
           <View style={styles.actionRow}>
             <TouchableOpacity
               style={styles.completeButton}
-              onPress={() => onComplete(current)}
+              onPress={() => {
+                console.log('[TaskAlertModal] Opening completion note modal for task:', current.id);
+                setCompletionNoteOpen(true);
+              }}
               activeOpacity={0.85}
             >
               <Text style={styles.actionText}>✅ Mark Complete</Text>
@@ -271,6 +296,20 @@ export default function TaskAlertModal({
           onSnooze(current, amount, unit);
         }}
         onCancel={() => setSnoozeOpen(false)}
+      />
+
+      <CompletionNoteModal
+        visible={completionNoteOpen}
+        taskName={current.name}
+        taskIcon={current.icon}
+        onSave={(note, remindNextTime) => {
+          setCompletionNoteOpen(false);
+          onComplete(current, note, remindNextTime);
+        }}
+        onSkip={() => {
+          setCompletionNoteOpen(false);
+          onComplete(current, '', false);
+        }}
       />
     </Modal>
   );
@@ -440,5 +479,33 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.8)',
     fontSize: 14,
     fontWeight: '600',
+  },
+  lastCompletionNote: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.5)',
+    textAlign: 'center',
+    marginTop: 6,
+    paddingHorizontal: 12,
+  },
+  reminderCard: {
+    backgroundColor: '#FEF3C7',
+    borderRadius: 10,
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    width: '100%',
+    borderLeftWidth: 3,
+    borderLeftColor: '#F59E0B',
+  },
+  reminderCardHeader: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#92400E',
+    marginBottom: 4,
+  },
+  reminderCardText: {
+    fontSize: 13,
+    color: '#78350F',
+    lineHeight: 18,
   },
 });

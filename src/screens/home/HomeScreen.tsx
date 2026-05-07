@@ -261,12 +261,25 @@ export default function HomeScreen() {
     });
   };
 
-  const handleAlertComplete = async (task: Task) => {
+  const handleAlertComplete = async (
+    task: Task,
+    completionNote?: string,
+    remindNextTime?: boolean
+  ) => {
     if (!householdId || !currentUser) return;
-    const userLabel =
+    console.log('[HomeScreen] Completing task with note:', {
+      taskId: task.id,
+      completionNote,
+      remindNextTime,
+    });
+    const displayName =
       currentUser.displayName ?? currentUser.email ?? currentUser.uid;
     try {
-      await completeTask(householdId, task.id, userLabel);
+      await completeTask(householdId, task.id, currentUser.uid, undefined, {
+        completionNote: completionNote ?? '',
+        remindNextTime: remindNextTime ?? false,
+        displayName,
+      });
       setTasks((prev) =>
         prev.map((t) =>
           t.id === task.id

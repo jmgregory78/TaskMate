@@ -23,6 +23,7 @@ import {
   Task,
   TaskActivity,
   TaskActivityType,
+  TaskCompletion,
 } from '../types/models';
 import { getFirstName } from '../utils/nameUtils';
 import { suggestTaskIcon } from './iconService';
@@ -47,6 +48,8 @@ type CreateTaskInput = Omit<
   | 'assignedBy'
   | 'snoozedUntil'
   | 'pendingNotificationId'
+  | 'nextTimeReminder'
+  | 'lastCompletionNote'
 > & {
   assignedTo?: string | null;
   assignedToName?: string | null;
@@ -142,6 +145,15 @@ function mapTaskDoc(id: string, data: any): Task {
           : 1,
     snoozedUntil: toDateOrNull(data.snoozedUntil),
     pendingNotificationId: data.pendingNotificationId ?? null,
+    notes: typeof data.notes === 'string' ? data.notes : undefined,
+    nextTimeReminder:
+      typeof data.nextTimeReminder === 'string'
+        ? data.nextTimeReminder
+        : undefined,
+    lastCompletionNote:
+      typeof data.lastCompletionNote === 'string'
+        ? data.lastCompletionNote
+        : undefined,
   };
 }
 
@@ -188,6 +200,9 @@ export async function createTask(
         : typeof data.reminderDaysBefore === 'number'
           ? data.reminderDaysBefore
           : 1,
+    notes: data.notes ?? null,
+    nextTimeReminder: null,
+    lastCompletionNote: null,
   });
   await logActivity(householdId, ref.id, 'created', userId);
   return ref.id;
@@ -333,11 +348,19 @@ export async function assignTask(
   await logActivity(householdId, taskId, 'assigned', assignedBy, note);
 }
 
+export interface CompleteTaskOptions {
+  completionNote?: string;
+  remindNextTime?: boolean;
+  displayName?: string;
+  skipInventoryDeduction?: boolean;
+}
+
 export async function completeTask(
   householdId: string,
   taskId: string,
   userId: string,
-  note?: string
+  note?: string,
+  options?: CompleteTaskOptions
 ): Promise<Date> {
   const task = await getTask(householdId, taskId);
   if (!task) throw new Error('Task not found');
@@ -354,7 +377,13 @@ export async function completeTask(
   const completedAt = new Date();
   const nextDueDate = computeNextDueDate(completedAt, task.recurrence);
   const ref = doc(db, 'households', householdId, 'tasks', taskId);
-  await updateDoc(ref, {
+
+  const completionNote = options?.completionNote ?? '';
+  const remindNextTime = options?.remindNextTime ?? false;
+  const displayName = options?.displayName ?? userId;
+
+  // Update task document
+  const updatePayload: Record<string, unknown> = {
     lastCompletedAt: Timestamp.fromDate(completedAt),
     lastCompletedBy: userId,
     completedAt: Timestamp.fromDate(completedAt),
@@ -362,19 +391,50 @@ export async function completeTask(
     nextDueDate: Timestamp.fromDate(nextDueDate),
     snoozedUntil: null,
     pendingNotificationId: null,
+    lastCompletionNote: completionNote || null,
+  };
+
+  // Set or clear nextTimeReminder based on checkbox
+  if (remindNextTime && completionNote) {
+    updatePayload.nextTimeReminder = completionNote;
+  } else if (!remindNextTime) {
+    // Only clear if not checked - preserve existing if no note but checked
+    updatePayload.nextTimeReminder = null;
+  }
+
+  await updateDoc(ref, updatePayload);
+
+  // Write to completions subcollection
+  const completionsRef = collection(
+    db,
+    'households',
+    householdId,
+    'tasks',
+    taskId,
+    'completions'
+  );
+  await addDoc(completionsRef, {
+    completedAt: Timestamp.fromDate(completedAt),
+    completedBy: userId,
+    displayName,
+    note: completionNote,
+    remindNextTime,
   });
+
   await logActivity(householdId, taskId, 'completed', userId, note);
 
-  // Deduct linked product usage when task is completed
-  try {
-    const usages = await getProductUsagesForTask(householdId, taskId);
-    await Promise.all(
-      usages.map((usage) =>
-        deductProductUsage(householdId, usage.productId, usage.usageAmount, task.name)
-      )
-    );
-  } catch (e) {
-    console.warn('[completeTask] Failed to deduct product usage:', e);
+  // Deduct linked product usage when task is completed (unless skipped)
+  if (!options?.skipInventoryDeduction) {
+    try {
+      const usages = await getProductUsagesForTask(householdId, taskId);
+      await Promise.all(
+        usages.map((usage) =>
+          deductProductUsage(householdId, usage.productId, usage.usageAmount, task.name)
+        )
+      );
+    } catch (e) {
+      console.warn('[completeTask] Failed to deduct product usage:', e);
+    }
   }
 
   return nextDueDate;
@@ -455,4 +515,48 @@ export async function getExpiredSnoozedTasks(householdId: string): Promise<Task[
     // Snooze has expired if snoozedUntil is in the past
     return task.snoozedUntil.getTime() <= now.getTime();
   });
+}
+
+/**
+ * Get completion history for a task, ordered by most recent first.
+ */
+export async function getCompletions(
+  householdId: string,
+  taskId: string,
+  limitCount?: number
+): Promise<TaskCompletion[]> {
+  const completionsRef = collection(
+    db,
+    'households',
+    householdId,
+    'tasks',
+    taskId,
+    'completions'
+  );
+  const q = limitCount
+    ? query(completionsRef, orderBy('completedAt', 'desc'), fbLimit(limitCount))
+    : query(completionsRef, orderBy('completedAt', 'desc'));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      id: d.id,
+      completedAt: toDate(data.completedAt),
+      completedBy: data.completedBy ?? '',
+      displayName: data.displayName ?? data.completedBy ?? '',
+      note: data.note ?? '',
+      remindNextTime: !!data.remindNextTime,
+    };
+  });
+}
+
+/**
+ * Dismiss the "remember for next time" reminder on a task.
+ */
+export async function dismissNextTimeReminder(
+  householdId: string,
+  taskId: string
+): Promise<void> {
+  const ref = doc(db, 'households', householdId, 'tasks', taskId);
+  await updateDoc(ref, { nextTimeReminder: null });
 }
