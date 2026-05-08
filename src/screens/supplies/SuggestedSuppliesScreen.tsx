@@ -754,8 +754,19 @@ function ConfigureSupplySheet({
               draft.thresholdType === 'quantity' && styles.thresholdCardActive,
             ]}
             onPress={() => {
-              const newValue = draft.thresholdValue === 0 ? 1 : draft.thresholdValue;
-              onUpdateDraft({ thresholdType: 'quantity', thresholdValue: newValue });
+              if (draft.thresholdType === 'percentage') {
+                // Convert percentage to quantity
+                const maxQty = draft.qty || 0;
+                if (maxQty > 0) {
+                  const qty = Math.round((draft.thresholdValue / 100) * maxQty);
+                  onUpdateDraft({ thresholdType: 'quantity', thresholdValue: Math.max(1, qty) });
+                } else {
+                  onUpdateDraft({ thresholdType: 'quantity', thresholdValue: 1 });
+                }
+              } else {
+                const newValue = draft.thresholdValue === 0 ? 1 : draft.thresholdValue;
+                onUpdateDraft({ thresholdType: 'quantity', thresholdValue: newValue });
+              }
             }}
             activeOpacity={0.7}
             disabled={submitting}
@@ -775,8 +786,19 @@ function ConfigureSupplySheet({
               draft.thresholdType === 'percentage' && styles.thresholdCardActive,
             ]}
             onPress={() => {
-              const newValue = draft.thresholdValue === 0 ? 25 : draft.thresholdValue;
-              onUpdateDraft({ thresholdType: 'percentage', thresholdValue: newValue > 100 ? 25 : newValue });
+              if (draft.thresholdType === 'quantity') {
+                // Convert quantity to percentage
+                const maxQty = draft.qty || 0;
+                if (maxQty > 0) {
+                  const pct = Math.round((draft.thresholdValue / maxQty) * 100);
+                  onUpdateDraft({ thresholdType: 'percentage', thresholdValue: Math.min(99, Math.max(1, pct)) });
+                } else {
+                  onUpdateDraft({ thresholdType: 'percentage', thresholdValue: 25 });
+                }
+              } else {
+                const newValue = draft.thresholdValue === 0 ? 25 : draft.thresholdValue;
+                onUpdateDraft({ thresholdType: 'percentage', thresholdValue: newValue > 100 ? 25 : newValue });
+              }
             }}
             activeOpacity={0.7}
             disabled={submitting}

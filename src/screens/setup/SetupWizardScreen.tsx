@@ -1808,7 +1808,18 @@ function SupplySheet({
                       sheetStyles.thresholdOption,
                       thresholdType === 'qty' && sheetStyles.thresholdOptionActive,
                     ]}
-                    onPress={() => setThresholdType('qty')}
+                    onPress={() => {
+                      if (thresholdType === 'pct') {
+                        // Convert percentage to quantity
+                        if (safeQty > 0) {
+                          const qty = Math.round((safeThresholdPct / 100) * safeQty);
+                          setThresholdQtyText(String(Math.max(1, qty)));
+                        } else {
+                          setThresholdQtyText('1');
+                        }
+                      }
+                      setThresholdType('qty');
+                    }}
                     activeOpacity={0.7}
                   >
                     <View style={sheetStyles.thresholdRadio}>
@@ -1844,7 +1855,18 @@ function SupplySheet({
                       sheetStyles.thresholdOption,
                       thresholdType === 'pct' && sheetStyles.thresholdOptionActive,
                     ]}
-                    onPress={() => setThresholdType('pct')}
+                    onPress={() => {
+                      if (thresholdType === 'qty') {
+                        // Convert quantity to percentage
+                        if (safeQty > 0) {
+                          const pct = Math.round((safeThresholdQty / safeQty) * 100);
+                          setThresholdPctText(String(Math.min(99, Math.max(1, pct))));
+                        } else {
+                          setThresholdPctText('25');
+                        }
+                      }
+                      setThresholdType('pct');
+                    }}
                     activeOpacity={0.7}
                   >
                     <View style={sheetStyles.thresholdRadio}>

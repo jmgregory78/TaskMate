@@ -195,10 +195,19 @@ export default function CreateProductScreen() {
               thresholdType === 'quantity' && styles.thresholdCardActive,
             ]}
             onPress={() => {
-              setThresholdType('quantity');
-              if (thresholdValue === '' || parseNumber(thresholdValue, 0) === 0) {
+              if (thresholdType === 'percentage') {
+                // Convert percentage to quantity
+                const maxQty = parseNumber(currentQty, 0);
+                if (maxQty > 0) {
+                  const qty = Math.round((parseNumber(thresholdValue, 25) / 100) * maxQty);
+                  setThresholdValue(String(Math.max(1, qty)));
+                } else {
+                  setThresholdValue('1');
+                }
+              } else if (thresholdValue === '' || parseNumber(thresholdValue, 0) === 0) {
                 setThresholdValue('1');
               }
+              setThresholdType('quantity');
             }}
             activeOpacity={0.7}
           >
@@ -217,10 +226,19 @@ export default function CreateProductScreen() {
               thresholdType === 'percentage' && styles.thresholdCardActive,
             ]}
             onPress={() => {
-              setThresholdType('percentage');
-              if (thresholdValue === '' || parseNumber(thresholdValue, 0) === 0) {
+              if (thresholdType === 'quantity') {
+                // Convert quantity to percentage
+                const maxQty = parseNumber(currentQty, 0);
+                if (maxQty > 0) {
+                  const pct = Math.round((parseNumber(thresholdValue, 1) / maxQty) * 100);
+                  setThresholdValue(String(Math.min(99, Math.max(1, pct))));
+                } else {
+                  setThresholdValue('25');
+                }
+              } else if (thresholdValue === '' || parseNumber(thresholdValue, 0) === 0) {
                 setThresholdValue('25');
               }
+              setThresholdType('percentage');
             }}
             activeOpacity={0.7}
           >
