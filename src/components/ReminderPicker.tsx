@@ -150,7 +150,7 @@ export default function ReminderPicker({ value, onChange }: Props) {
           <Text
             style={[styles.pillText, (isCustom || showCustomInput) && styles.pillTextActive]}
           >
-            {isCustom && !showCustomInput ? customDisplayLabel : 'Custom...'}
+            {isCustom && !showCustomInput ? `${customDisplayLabel} ✏️` : 'Custom...'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -189,7 +189,7 @@ export default function ReminderPicker({ value, onChange }: Props) {
             onPress={handleConfirmCustom}
             activeOpacity={0.7}
           >
-            <Text style={styles.confirmButtonText}>Confirm</Text>
+            <Text style={styles.confirmButtonText}>Set Reminder</Text>
           </TouchableOpacity>
         </View>
       ) : null}

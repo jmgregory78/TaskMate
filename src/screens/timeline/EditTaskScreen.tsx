@@ -43,7 +43,6 @@ import AssigneeSelector, {
 } from '../../components/AssigneeSelector';
 import ScreenHeader from '../../components/ScreenHeader';
 import ReminderPicker from '../../components/ReminderPicker';
-import DeleteRowButton from '../../components/DeleteRowButton';
 import { sendAssignmentNotification } from '../../services/notificationService';
 import { getFirstName } from '../../utils/nameUtils';
 import { Colors } from '../../constants/colors';
@@ -358,7 +357,7 @@ export default function EditTaskScreen() {
     if (!task || deleting) return;
     Alert.alert(
       'Delete Task?',
-      'This will permanently delete this task and cannot be undone.',
+      'This will permanently delete this task and all its history. This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -368,10 +367,10 @@ export default function EditTaskScreen() {
             setDeleting(true);
             try {
               await deleteTask(householdId, taskId);
-              navigation.goBack();
+              navigation.popToTop();
             } catch (e) {
               const err = e as { message?: string };
-              Alert.alert('Error', err.message ?? 'Failed to delete task');
+              Alert.alert('Error', err.message ?? 'Failed to delete task. Please try again.');
               setDeleting(false);
             }
           },
@@ -699,11 +698,15 @@ export default function EditTaskScreen() {
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
 
-            <DeleteRowButton
-              label="Delete Task"
+            <TouchableOpacity
+              style={[styles.deleteButton, (deleting || submitting) && styles.disabled]}
               onPress={handleDelete}
               disabled={deleting || submitting}
-            />
+              activeOpacity={0.8}
+            >
+              <Text style={styles.deleteButtonIcon}>🗑️</Text>
+              <Text style={styles.deleteButtonText}>Delete Task</Text>
+            </TouchableOpacity>
           </ScrollView>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
@@ -998,5 +1001,26 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.textPrimary,
     lineHeight: 22,
+  },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#EF4444',
+    borderRadius: 12,
+    padding: 16,
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 32,
+    gap: 8,
+  },
+  deleteButtonIcon: {
+    fontSize: 16,
+  },
+  deleteButtonText: {
+    color: '#EF4444',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

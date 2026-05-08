@@ -1125,7 +1125,7 @@ function ConfigureTaskStep({
   };
 
   const customDisplayLabel = isCustomValue && draft.reminderDays !== null
-    ? customReminderLabel(draft.reminderDays)
+    ? `${customReminderLabel(draft.reminderDays)} ✏️`
     : 'Custom...';
 
   return (
@@ -1318,7 +1318,7 @@ function ConfigureTaskStep({
                 activeOpacity={0.7}
                 disabled={submitting}
               >
-                <Text style={styles.customConfirmText}>Confirm</Text>
+                <Text style={styles.customConfirmText}>Set Reminder</Text>
               </TouchableOpacity>
             </View>
           ) : null}

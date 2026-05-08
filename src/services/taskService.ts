@@ -473,6 +473,11 @@ export async function deleteTask(
   );
   await Promise.all(activitySnap.docs.map((d) => deleteDoc(d.ref)));
 
+  const completionsSnap = await getDocs(
+    collection(db, 'households', householdId, 'tasks', taskId, 'completions')
+  );
+  await Promise.all(completionsSnap.docs.map((d) => deleteDoc(d.ref)));
+
   await deleteDoc(doc(db, 'households', householdId, 'tasks', taskId));
 }
 
