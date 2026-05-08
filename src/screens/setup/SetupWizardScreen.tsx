@@ -1272,9 +1272,6 @@ function ConfigureTaskStep({
             >
               {customDisplayLabel}
             </Text>
-            {isCustomValue && !showCustomInput ? (
-              <Text style={styles.reminderCheck}>✓</Text>
-            ) : null}
           </TouchableOpacity>
           {showCustomInput ? (
             <View style={styles.customReminderBox}>
@@ -1344,7 +1341,9 @@ function ConfigureTaskStep({
           activeOpacity={0.7}
           disabled={submitting}
         >
-          <Text style={styles.skipText}>Skip</Text>
+          <Text style={styles.skipText}>
+            {index < total - 1 ? 'Skip' : 'Cancel'}
+          </Text>
         </TouchableOpacity>
       </View>
     </>

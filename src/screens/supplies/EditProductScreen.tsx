@@ -3,13 +3,13 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
-  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import {
   RouteProp,
   useNavigation,
@@ -175,7 +175,7 @@ export default function EditProductScreen() {
 
   return (
     <ScreenWrapper contentContainerStyle={styles.content}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar style="dark" />
       <View style={styles.headerRow}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}

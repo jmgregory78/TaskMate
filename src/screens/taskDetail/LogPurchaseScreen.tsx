@@ -7,8 +7,8 @@ import {
   StyleSheet,
   ActivityIndicator,
   Platform,
-  StatusBar,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import {
   RouteProp,
   useNavigation,
@@ -149,8 +149,8 @@ export default function LogPurchaseScreen() {
 
   return (
     <>
-    <StatusBar barStyle="dark-content" />
-    <ScreenWrapper contentContainerStyle={styles.content}>
+      <StatusBar style="dark" />
+      <ScreenWrapper contentContainerStyle={styles.content}>
       <View style={styles.headerRow}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}

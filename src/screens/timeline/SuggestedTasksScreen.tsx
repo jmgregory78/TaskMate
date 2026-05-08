@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import DateTimePicker, {
@@ -398,6 +399,7 @@ export default function SuggestedTasksScreen() {
 
   return (
     <View style={styles.flex}>
+      <StatusBar style="dark" />
       <SafeAreaView edges={['top']} style={styles.safeTop} />
       <KeyboardAvoidingView
         style={styles.container}
@@ -933,7 +935,9 @@ function ConfigureTaskStep({
           activeOpacity={0.7}
           disabled={submitting}
         >
-          <Text style={styles.skipText}>Skip</Text>
+          <Text style={styles.skipText}>
+            {index < total - 1 ? 'Skip' : 'Cancel'}
+          </Text>
         </TouchableOpacity>
       </View>
     </>

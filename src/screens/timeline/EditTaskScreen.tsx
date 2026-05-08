@@ -13,6 +13,7 @@ import {
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import {
   RouteProp,
   useNavigation,
@@ -402,14 +403,16 @@ export default function EditTaskScreen() {
   }
 
   return (
-    <View style={styles.screen}>
-      <ScreenHeader
-        title="Edit Task"
-        leftLabel="Back"
-        rightLabel={submitting ? '...' : 'Save'}
-        rightDisabled={!canSave}
-        onRightPress={handleSave}
-      />
+    <>
+      <StatusBar style="dark" />
+      <View style={styles.screen}>
+        <ScreenHeader
+          title="Edit Task"
+          leftLabel="Back"
+          rightLabel={submitting ? '...' : 'Save'}
+          rightDisabled={!canSave}
+          onRightPress={handleSave}
+        />
 
       <KeyboardAvoidingView
         style={styles.flex}
@@ -710,7 +713,8 @@ export default function EditTaskScreen() {
           </ScrollView>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
-    </View>
+      </View>
+    </>
   );
 }
 

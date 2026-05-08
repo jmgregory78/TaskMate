@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { useNavigation } from '@react-navigation/native';
 import ScreenWrapper from '../../components/ScreenWrapper';
 import ScreenHeader from '../../components/ScreenHeader';
@@ -135,6 +136,7 @@ export default function CreateProductScreen() {
 
   return (
     <>
+      <StatusBar style="dark" />
       <ScreenHeader
         title="New Supply"
         leftLabel="Supplies"
@@ -395,6 +397,14 @@ export default function CreateProductScreen() {
             <Text style={styles.buttonText}>Save Supply</Text>
           )}
         </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={styles.cancelButton}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.cancelText}>Cancel</Text>
+        </TouchableOpacity>
         </View>
       </ScreenWrapper>
     </>
@@ -648,5 +658,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textMuted,
     fontStyle: 'italic',
+  },
+  cancelButton: {
+    alignItems: 'center',
+    padding: 16,
+    marginBottom: 16,
+  },
+  cancelText: {
+    color: '#6B7280',
+    fontSize: 16,
   },
 });

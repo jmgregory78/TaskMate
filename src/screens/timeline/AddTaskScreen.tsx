@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Platform,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { format } from 'date-fns';
 import DateTimePicker, {
@@ -316,6 +317,7 @@ export default function AddTaskScreen() {
 
   return (
     <>
+      <StatusBar style="dark" />
       <ScreenHeader title="New Task" leftLabel="Back" onLeftPress={handleBack} />
       <ScreenWrapper contentContainerStyle={styles.content}>
         <TouchableOpacity
@@ -699,6 +701,14 @@ export default function AddTaskScreen() {
         <Text style={styles.buttonText}>
           {submitting ? 'Adding...' : 'Save Task'}
         </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        onPress={() => navigation.goBack()}
+        style={styles.cancelButton}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.cancelText}>Cancel</Text>
       </TouchableOpacity>
       </ScreenWrapper>
     </>
@@ -1095,5 +1105,14 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.textPrimary,
     lineHeight: 22,
+  },
+  cancelButton: {
+    alignItems: 'center',
+    padding: 16,
+    marginBottom: 16,
+  },
+  cancelText: {
+    color: '#6B7280',
+    fontSize: 16,
   },
 });

@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RouteProp, useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { useAuth } from '../../hooks/useAuth';
@@ -369,6 +370,7 @@ export default function SuggestedSuppliesScreen() {
 
   return (
     <View style={styles.flex}>
+      <StatusBar style="dark" />
       <SafeAreaView edges={['top']} style={styles.safeTop} />
       <KeyboardAvoidingView
         style={styles.container}
@@ -977,7 +979,9 @@ function ConfigureSupplySheet({
           activeOpacity={0.7}
           disabled={submitting}
         >
-          <Text style={styles.skipText}>Skip</Text>
+          <Text style={styles.skipText}>
+            {index < total - 1 ? 'Skip' : 'Cancel'}
+          </Text>
         </TouchableOpacity>
       </View>
     </>

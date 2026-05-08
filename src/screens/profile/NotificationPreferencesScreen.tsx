@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import DateTimePicker, {
   DateTimePickerEvent,
 } from '@react-native-community/datetimepicker';
@@ -167,8 +168,10 @@ export default function NotificationPreferencesScreen() {
   };
 
   return (
-    <View style={styles.screen}>
-      <ScreenHeader title="Notifications" leftLabel="Back" />
+    <>
+      <StatusBar style="dark" />
+      <View style={styles.screen}>
+        <ScreenHeader title="Notifications" leftLabel="Back" />
 
       {loading ? (
         <View style={styles.loadingContainer}>
@@ -399,7 +402,8 @@ export default function NotificationPreferencesScreen() {
           ) : null}
         </ScrollView>
       )}
-    </View>
+      </View>
+    </>
   );
 }
 

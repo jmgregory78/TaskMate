@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import {
   RouteProp,
   useFocusEffect,
@@ -537,6 +538,7 @@ export default function ProductDetailScreen() {
 
   return (
     <>
+      <StatusBar style="dark" />
       <ScreenHeader
         title=""
         leftLabel="Supplies"
