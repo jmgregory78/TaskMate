@@ -193,6 +193,31 @@ export default function ProductDetailScreen() {
     }, [householdId, productId])
   );
 
+  // Find suggested tasks that link to this supply (by matching names to suggested supply IDs)
+  // Only show suggestions for supplies NOT in auto mode (auto mode supplies don't use tasks)
+  // MUST be declared before any early returns to maintain consistent hook count
+  const suggestedTasksForSupply: SuggestedTask[] = useMemo(() => {
+    if (!product) return [];
+    const isAutoMode = product.depletionMode === 'auto';
+    if (isAutoMode) return [];
+    const prodName = product.name.toLowerCase();
+    // Find a matching suggested supply by name similarity
+    for (const cat of SUGGESTED_SUPPLIES) {
+      for (const supply of cat.supplies) {
+        const supplyName = supply.name.toLowerCase();
+        // Check if names match or are very similar
+        if (prodName.includes(supplyName) || supplyName.includes(prodName) ||
+            prodName === supplyName) {
+          const linkedTaskIds = usageRefs.map(r => r.task.name.toLowerCase());
+          // Get tasks that link to this supply, excluding ones already formally linked
+          const tasks = getTasksForSupply(supply.id);
+          return tasks.filter(t => !linkedTaskIds.includes(t.name.toLowerCase()));
+        }
+      }
+    }
+    return [];
+  }, [product, usageRefs]);
+
   const handleStockSave = async (newQuantity: number, note: string) => {
     if (!product || !user) return;
     const previousProduct = product;
@@ -415,28 +440,6 @@ export default function ProductDetailScreen() {
     if (rate === 1) return `1 per ${unit}`;
     return `${rate} per ${unit}`;
   };
-
-  // Find suggested tasks that link to this supply (by matching names to suggested supply IDs)
-  // Only show suggestions for supplies NOT in auto mode (auto mode supplies don't use tasks)
-  const suggestedTasksForSupply: SuggestedTask[] = useMemo(() => {
-    if (isAutoMode) return [];
-    const prodName = product.name.toLowerCase();
-    // Find a matching suggested supply by name similarity
-    for (const cat of SUGGESTED_SUPPLIES) {
-      for (const supply of cat.supplies) {
-        const supplyName = supply.name.toLowerCase();
-        // Check if names match or are very similar
-        if (prodName.includes(supplyName) || supplyName.includes(prodName) ||
-            prodName === supplyName) {
-          const linkedTaskIds = usageRefs.map(r => r.task.name.toLowerCase());
-          // Get tasks that link to this supply, excluding ones already formally linked
-          const tasks = getTasksForSupply(supply.id);
-          return tasks.filter(t => !linkedTaskIds.includes(t.name.toLowerCase()));
-        }
-      }
-    }
-    return [];
-  }, [product.name, isAutoMode, usageRefs]);
 
   // Calculate percent for display (uses maxQuantity from history as 100%)
   const percent =

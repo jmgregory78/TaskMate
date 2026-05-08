@@ -731,20 +731,38 @@ export default function TaskDetailScreen() {
         </TouchableOpacity>
       </View>
 
-      {task.completedToday ? (
-        <View style={[styles.completeButton, styles.completeButtonDone]}>
-          <Text style={styles.completeButtonText}>Completed ✓</Text>
-        </View>
-      ) : (
-        <TouchableOpacity
-          style={[styles.completeButton, actionPending && styles.disabled]}
-          onPress={handleOpenComplete}
-          disabled={actionPending}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.completeButtonText}>Mark as Complete</Text>
-        </TouchableOpacity>
-      )}
+      {(() => {
+        // Determine if alert banner is showing (due within 7 days or snoozed)
+        const now = new Date();
+        const days = differenceInCalendarDays(task.nextDueDate, now);
+        const isSnoozed = !!task.snoozedUntil && task.snoozedUntil.getTime() > now.getTime();
+        const hasActiveAlert = !task.completedToday && (days <= 7 || isSnoozed);
+
+        if (task.completedToday) {
+          return (
+            <View style={[styles.completeButton, styles.completeButtonDone]}>
+              <Text style={styles.completeButtonText}>Completed ✓</Text>
+            </View>
+          );
+        }
+
+        // If alert banner is showing, don't show duplicate button
+        if (hasActiveAlert) {
+          return null;
+        }
+
+        // Future task (no alert banner) - show "Mark as Done Early" outlined button
+        return (
+          <TouchableOpacity
+            style={[styles.earlyCompleteButton, actionPending && styles.disabled]}
+            onPress={handleOpenComplete}
+            disabled={actionPending}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.earlyCompleteButtonText}>Mark as Done Early</Text>
+          </TouchableOpacity>
+        );
+      })()}
 
       <View style={styles.section}>
         <Text style={styles.sectionHeader}>Inventory & Supplies</Text>
@@ -1308,6 +1326,22 @@ const styles = StyleSheet.create({
     color: Colors.textOnDark,
     fontSize: 17,
     fontWeight: '700',
+  },
+  earlyCompleteButton: {
+    height: 48,
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: Colors.primary,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 24,
+    marginHorizontal: 16,
+  },
+  earlyCompleteButtonText: {
+    color: Colors.primary,
+    fontSize: 15,
+    fontWeight: '600',
   },
   completedBanner: {
     backgroundColor: Colors.successBg,
