@@ -38,6 +38,7 @@ import AddTaskScreen from '../screens/timeline/AddTaskScreen';
 import EditTaskScreen from '../screens/timeline/EditTaskScreen';
 import SuggestedTasksScreen from '../screens/timeline/SuggestedTasksScreen';
 import TaskDetailScreen from '../screens/taskDetail/TaskDetailScreen';
+import CompletedTaskDetailScreen from '../screens/timeline/CompletedTaskDetailScreen';
 import AddProductUsageScreen from '../screens/taskDetail/AddProductUsageScreen';
 import LogPurchaseScreen from '../screens/taskDetail/LogPurchaseScreen';
 import ProductDetailScreen from '../screens/supplies/ProductDetailScreen';
@@ -61,6 +62,7 @@ import { Colors } from '../constants/colors';
 import type {
   Product,
   RecurrenceFrequency,
+  Task,
   TaskCategory,
 } from '../types/models';
 
@@ -94,6 +96,7 @@ export type AppStackParamList = {
     | undefined;
   SuggestedTasks: { preSelected?: string } | undefined;
   TaskDetail: { taskId: string };
+  CompletedTaskDetail: { taskId: string; task: Task };
   EditTask: { taskId: string; householdId: string };
   AddProductUsage: { householdId: string; taskId: string };
   LogPurchase: { householdId: string; productId: string };
@@ -512,6 +515,10 @@ export default function RootNavigator() {
             component={SuggestedTasksScreen}
           />
           <AppStack.Screen name="TaskDetail" component={TaskDetailScreen} />
+          <AppStack.Screen
+            name="CompletedTaskDetail"
+            component={CompletedTaskDetailScreen}
+          />
           <AppStack.Screen name="EditTask" component={EditTaskScreen} />
           <AppStack.Screen
             name="AddProductUsage"

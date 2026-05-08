@@ -161,18 +161,20 @@ function TaskCard({
     </View>
   );
 
-  // Completed tasks are not tappable (or show read-only completion detail)
+  // Completed tasks navigate to read-only detail view
   if (isCompleted) {
     return (
-      <View
+      <TouchableOpacity
         style={[
           styles.card,
           styles.cardCompletedToday,
           { borderLeftColor: borderColor },
         ]}
+        onPress={onPress}
+        activeOpacity={0.7}
       >
         {cardContent}
-      </View>
+      </TouchableOpacity>
     );
   }
 
@@ -555,14 +557,23 @@ export default function TimelineScreen() {
     return <TimelineSectionHeader section={section} />;
   };
 
-  const renderItem = ({ item, section }: { item: TimelineTask; section: TimelineSection }) => (
-    <TaskCard
-      item={item}
-      onPress={() => navigation.navigate('TaskDetail', { taskId: item.task.id })}
-      isNeedsAttention={section.variant === 'attention'}
-      isCompletedToday={section.variant === 'completedToday'}
-    />
-  );
+  const renderItem = ({ item, section }: { item: TimelineTask; section: TimelineSection }) => {
+    const isCompletedToday = section.variant === 'completedToday';
+    return (
+      <TaskCard
+        item={item}
+        onPress={() => {
+          if (isCompletedToday) {
+            navigation.navigate('CompletedTaskDetail', { taskId: item.task.id, task: item.task });
+          } else {
+            navigation.navigate('TaskDetail', { taskId: item.task.id });
+          }
+        }}
+        isNeedsAttention={section.variant === 'attention'}
+        isCompletedToday={isCompletedToday}
+      />
+    );
+  };
 
   const renderSectionFooter = ({ section }: { section: TimelineSection }) => {
     // Show "all caught up" only for empty needs attention section
