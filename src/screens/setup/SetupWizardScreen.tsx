@@ -1716,23 +1716,28 @@ function SupplySheet({
               showsVerticalScrollIndicator={false}
             >
               <View style={sheetStyles.handle} />
-              <Text style={sheetStyles.title}>{title}</Text>
+              {isAdd ? (
+                <View style={sheetStyles.nameCard}>
+                  {supply.icon ? (
+                    <Text style={sheetStyles.supplyHeadingIcon}>{supply.icon}</Text>
+                  ) : null}
+                  <TextInput
+                    style={sheetStyles.nameInput}
+                    value={nameText}
+                    onChangeText={setNameText}
+                    placeholder="Enter supply name"
+                    placeholderTextColor="#9CA3AF"
+                    returnKeyType="done"
+                    maxLength={100}
+                  />
+                  <Text style={sheetStyles.pencilEmoji}>✏️</Text>
+                </View>
+              ) : (
+                <Text style={sheetStyles.title}>{title}</Text>
+              )}
 
               {isAdd ? (
                 <>
-                  {/* Supply Name - editable for new supplies */}
-                  <Text style={sheetStyles.fieldLabel}>
-                    What would you like to call this supply?
-                  </Text>
-                  <TextInput
-                    style={sheetStyles.textInput}
-                    value={nameText}
-                    onChangeText={setNameText}
-                    placeholder={supply.name}
-                    placeholderTextColor={Colors.textLight}
-                    autoCapitalize="words"
-                  />
-
                   {/* Quantity */}
                   <Text style={sheetStyles.fieldLabel}>
                     How many do you have on hand?
@@ -2064,6 +2069,36 @@ const sheetStyles = StyleSheet.create({
     color: Colors.textPrimary,
     textAlign: 'center',
     marginBottom: 16,
+  },
+  nameCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  supplyHeadingIcon: {
+    fontSize: 28,
+    marginRight: 12,
+  },
+  nameInput: {
+    flex: 1,
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111827',
+    padding: 0,
+    margin: 0,
+  },
+  pencilEmoji: {
+    fontSize: 16,
+    opacity: 0.5,
+    paddingLeft: 8,
   },
   fieldLabel: {
     fontSize: 14,

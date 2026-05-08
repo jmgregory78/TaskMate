@@ -658,9 +658,17 @@ function ConfigureSupplySheet({
           {supply.icon ? (
             <Text style={styles.supplyHeadingIcon}>{supply.icon}</Text>
           ) : null}
-          <Text style={[styles.title, styles.nameText]} numberOfLines={2}>
-            {supply.name}
-          </Text>
+          <TextInput
+            style={styles.nameInput}
+            value={draft.name}
+            onChangeText={(name) => onUpdateDraft({ name })}
+            placeholder="Enter supply name"
+            placeholderTextColor="#9CA3AF"
+            returnKeyType="done"
+            maxLength={100}
+            editable={!submitting}
+          />
+          <Text style={styles.pencilEmoji}>✏️</Text>
         </View>
       </View>
       <ScrollView
@@ -668,20 +676,6 @@ function ConfigureSupplySheet({
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Supply Name */}
-        <Text style={styles.fieldLabel}>
-          What would you like to call this supply?
-        </Text>
-        <TextInput
-          style={styles.textInput}
-          value={draft.name}
-          onChangeText={(name) => onUpdateDraft({ name })}
-          placeholder={supply.name}
-          placeholderTextColor={Colors.textLight}
-          autoCapitalize="words"
-          editable={!submitting}
-        />
-
         {/* Quantity */}
         <Text style={styles.fieldLabel}>
           How many do you have on hand?
@@ -1174,15 +1168,33 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   nameCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   supplyHeadingIcon: {
     fontSize: 28,
     marginRight: 12,
   },
-  nameText: {
+  nameInput: {
     flex: 1,
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111827',
+    padding: 0,
+    margin: 0,
+  },
+  pencilEmoji: {
+    fontSize: 16,
+    opacity: 0.5,
+    paddingLeft: 8,
   },
   fieldLabel: {
     fontSize: 15,

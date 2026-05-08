@@ -418,6 +418,11 @@ export default function TimelineScreen() {
     // Get date 6 months from now for limiting future tasks
     const sixMonthsOut = addMonths(today, 6);
 
+    // Helper to check if a date is in the current calendar month
+    const isCurrentMonth = (date: Date) =>
+      date.getMonth() === today.getMonth() &&
+      date.getFullYear() === today.getFullYear();
+
     for (const task of filteredTasks) {
       const item: TimelineTask = {
         task,
@@ -436,11 +441,11 @@ export default function TimelineScreen() {
       } else if (days > 0 && days <= 7) {
         // This week (future)
         thisWeek.push(item);
-      } else if (days > 7 && days <= 30) {
-        // This month (more than a week away)
+      } else if (days > 7 && isCurrentMonth(task.nextDueDate)) {
+        // This month (more than a week away, but still in current calendar month)
         thisMonth.push(item);
-      } else if (days > 30 && task.nextDueDate <= sixMonthsOut) {
-        // Future months (up to 6 months)
+      } else if (days > 7 && task.nextDueDate <= sixMonthsOut) {
+        // Future months (up to 6 months) - only for dates NOT in current month
         const monthKey = format(task.nextDueDate, 'yyyy-MM');
         if (!futureMonths.has(monthKey)) {
           futureMonths.set(monthKey, []);
