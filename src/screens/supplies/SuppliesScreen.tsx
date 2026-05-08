@@ -499,10 +499,16 @@ function Header() {
   );
 }
 
-function borderColorFor(percent: number): string {
-  if (percent > 50) return '#38A169';
-  if (percent > 25) return '#D69E2E';
-  return '#E53E3E';
+function borderColorFor(
+  currentQty: number,
+  thresholdQty: number
+): string {
+  // Red: out of stock
+  if (currentQty === 0) return '#EF4444';
+  // Amber: at or below threshold but still has stock
+  if (currentQty <= thresholdQty) return '#F59E0B';
+  // Green: above threshold
+  return '#10B981';
 }
 
 interface SupplyCardProps {
@@ -513,9 +519,41 @@ interface SupplyCardProps {
 }
 
 function SupplyCard({ row, onTap, onBuy, onMenu }: SupplyCardProps) {
-  const percent = stockPercent(row.product);
-  const left = borderColorFor(percent);
+  const product = row.product;
+  const isOutOfStock = product.currentQuantity === 0;
+
+  // Calculate threshold quantity for border color
+  let thresholdQty: number;
+  if (product.thresholdType === 'quantity') {
+    thresholdQty = product.thresholdValue;
+  } else if (product.thresholdType === 'percentage') {
+    thresholdQty = (product.thresholdValue / 100) * product.currentQuantity;
+  } else if (product.lowThresholdQty !== null) {
+    thresholdQty = product.lowThresholdQty;
+  } else {
+    thresholdQty = (product.lowThresholdPercent / 100) * product.currentQuantity;
+  }
+
+  const left = borderColorFor(product.currentQuantity, thresholdQty);
   const isRed = row.isRedZone;
+
+  // Build stock text
+  let stockText: string;
+  if (isOutOfStock) {
+    stockText = 'Out of stock';
+  } else if (row.usages.length > 0) {
+    stockText = `${product.currentQuantity} ${row.unitAction} remaining`;
+  } else {
+    stockText = `${product.currentQuantity} ${product.containerUnit} on hand`;
+  }
+
+  // Build run out text
+  let runOutText = '';
+  if (!isOutOfStock && row.estimatedRunOutDate) {
+    runOutText = ` · runs out ${format(row.estimatedRunOutDate, 'MMMM d, yyyy')}`;
+  } else if (isOutOfStock) {
+    runOutText = ' · has run out';
+  }
 
   return (
     <TouchableOpacity
@@ -529,7 +567,7 @@ function SupplyCard({ row, onTap, onBuy, onMenu }: SupplyCardProps) {
     >
       <View style={styles.cardRow}>
         <Text style={styles.cardName} numberOfLines={2}>
-          {row.product.name}
+          {product.name}
         </Text>
         <TouchableOpacity
           onPress={onMenu}
@@ -539,27 +577,22 @@ function SupplyCard({ row, onTap, onBuy, onMenu }: SupplyCardProps) {
           <Text style={styles.cardMenu}>···</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={styles.buyPill}
+          style={[styles.buyPill, isOutOfStock && styles.buyPillRed]}
           onPress={onBuy}
           activeOpacity={0.8}
         >
-          <Text style={styles.buyPillText}>Buy</Text>
+          <Text style={styles.buyPillText}>{isOutOfStock ? 'Buy Now' : 'Buy'}</Text>
         </TouchableOpacity>
       </View>
       <View style={styles.cardBar}>
-        <InventoryBar product={row.product} showLabel={false} compact />
+        <InventoryBar product={product} showLabel={false} compact />
       </View>
-      <Text style={styles.cardMeta}>
-        {row.usages.length > 0
-          ? `${row.product.currentQuantity} ${row.unitAction} remaining`
-          : `${row.product.currentQuantity} ${row.product.containerUnit} on hand`}
-        {row.estimatedRunOutDate
-          ? ` · runs out ${format(row.estimatedRunOutDate, 'MMMM d, yyyy')}`
-          : ''}
+      <Text style={[styles.cardMeta, isOutOfStock && styles.cardMetaRed]}>
+        {stockText}{runOutText}
       </Text>
       {isRed && row.reorderByDate ? (
         <Text style={styles.cardReorder}>
-          Reorder by {format(row.reorderByDate, 'MMM d, yyyy')}
+          {isOutOfStock ? 'Reorder now!' : `Reorder by ${format(row.reorderByDate, 'MMM d, yyyy')}`}
         </Text>
       ) : null}
     </TouchableOpacity>
@@ -707,6 +740,9 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: Colors.primary,
   },
+  buyPillRed: {
+    backgroundColor: '#EF4444',
+  },
   buyPillText: {
     color: Colors.textOnDark,
     fontSize: 13,
@@ -718,6 +754,10 @@ const styles = StyleSheet.create({
   cardMeta: {
     fontSize: 12,
     color: Colors.textMuted,
+  },
+  cardMetaRed: {
+    color: '#EF4444',
+    fontWeight: '600',
   },
   cardReorder: {
     fontSize: 13,

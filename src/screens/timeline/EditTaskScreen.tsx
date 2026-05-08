@@ -13,7 +13,6 @@ import {
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
 import {
   RouteProp,
   useNavigation,
@@ -404,7 +403,6 @@ export default function EditTaskScreen() {
 
   return (
     <>
-      <StatusBar style="dark" />
       <View style={styles.screen}>
         <ScreenHeader
           title="Edit Task"

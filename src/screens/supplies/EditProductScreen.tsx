@@ -9,7 +9,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
 import {
   RouteProp,
   useNavigation,
@@ -121,16 +120,17 @@ export default function EditProductScreen() {
     // Validate threshold
     const qtyN = parseNumber(currentQty, 1);
     const thresholdValueN = parseNumber(thresholdValue, 1);
-    const effectiveThreshold = thresholdType === 'quantity'
-      ? thresholdValueN
-      : (thresholdValueN / 100) * qtyN;
 
-    if (effectiveThreshold <= 0) {
-      setError('Reorder threshold must be at least 1');
+    if (thresholdValueN < 0) {
+      setError('Threshold cannot be negative');
       return;
     }
-    if (effectiveThreshold >= qtyN) {
-      setError('Reorder threshold must be less than your current quantity');
+    if (thresholdType === 'quantity' && thresholdValueN > qtyN) {
+      setError('Threshold cannot exceed your current quantity');
+      return;
+    }
+    if (thresholdType === 'percentage' && thresholdValueN > 100) {
+      setError('Threshold percentage cannot exceed 100%');
       return;
     }
 
@@ -175,7 +175,6 @@ export default function EditProductScreen() {
 
   return (
     <ScreenWrapper contentContainerStyle={styles.content}>
-      <StatusBar style="dark" />
       <View style={styles.headerRow}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
@@ -312,6 +311,15 @@ export default function EditProductScreen() {
                 {containerUnit.trim() || 'units'} remaining
               </Text>
             </View>
+            {parseNumber(currentQty, 0) === 1 && parseNumber(thresholdValue, 0) === 1 ? (
+              <Text style={styles.thresholdHelper}>
+                You'll be alerted when you're on your last one
+              </Text>
+            ) : parseNumber(currentQty, 0) === 0 ? (
+              <Text style={styles.thresholdHelper}>
+                You'll be alerted when you run out
+              </Text>
+            ) : null}
           </View>
         ) : (
           <View style={styles.thresholdInputSection}>

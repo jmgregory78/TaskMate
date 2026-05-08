@@ -9,7 +9,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
 import {
   RouteProp,
   useFocusEffect,
@@ -538,7 +537,6 @@ export default function ProductDetailScreen() {
 
   return (
     <>
-      <StatusBar style="dark" />
       <ScreenHeader
         title=""
         leftLabel="Supplies"
@@ -563,6 +561,26 @@ export default function ProductDetailScreen() {
           <Text style={styles.buyPillText}>Buy</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Out of stock warning banner */}
+      {product.currentQuantity === 0 ? (
+        <View style={styles.outOfStockBanner}>
+          <View style={styles.outOfStockContent}>
+            <Text style={styles.outOfStockText}>
+              {'\u26A0\uFE0F'} Out of stock — reorder now!
+            </Text>
+          </View>
+          {(product.amazonUrl ?? '').trim().length > 0 ? (
+            <TouchableOpacity
+              style={styles.outOfStockBuyButton}
+              onPress={handleBuy}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.outOfStockBuyText}>Buy Now</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      ) : null}
 
       {successBanner ? (
         <View style={styles.successBanner}>
@@ -636,31 +654,36 @@ export default function ProductDetailScreen() {
           ) : null}
         </View>
         <InventoryBar product={product} maxQuantity={maxQuantity} showLabel={false} />
-        <Text style={styles.statText}>
-          {isAutoMode
-            ? `${product.currentQuantity} ${product.containerUnit} remaining${daysRemaining !== null ? ` · ${daysRemaining} days left` : ''}`
-            : usageRefs.length > 0
-              ? `${product.currentQuantity} ${product.name} ${unitAction} remaining`
-              : `${product.currentQuantity} ${product.containerUnit} on hand`}
+        <Text style={[styles.statText, product.currentQuantity === 0 && styles.statTextRed]}>
+          {product.currentQuantity === 0
+            ? 'Out of stock'
+            : isAutoMode
+              ? `${product.currentQuantity} ${product.containerUnit} remaining${daysRemaining !== null ? ` · ${daysRemaining} days left` : ''}`
+              : usageRefs.length > 0
+                ? `${product.currentQuantity} ${product.name} ${unitAction} remaining`
+                : `${product.currentQuantity} ${product.containerUnit} on hand`}
         </Text>
         <Text style={styles.thresholdDisplayText}>{thresholdDisplayText()}</Text>
         {!isAutoMode && usageRefs.length === 0 ? (
           <Text style={styles.metaText}>Link a task to track usage</Text>
         ) : null}
         <Text style={styles.metaText}>
-          Estimated run out:{' '}
-          {runOutDate ? format(runOutDate, 'MMMM d, yyyy') : '—'}
+          {product.currentQuantity === 0
+            ? 'Has run out'
+            : `Estimated run out: ${runOutDate ? format(runOutDate, 'MMMM d, yyyy') : '—'}`}
         </Text>
         <Text
           style={[
             styles.metaText,
-            reorderInPast && styles.metaTextRed,
-            reorderWithin7Days && !reorderInPast && styles.metaTextAmber,
+            (reorderInPast || product.currentQuantity === 0) && styles.metaTextRed,
+            reorderWithin7Days && !reorderInPast && product.currentQuantity > 0 && styles.metaTextAmber,
           ]}
         >
-          {reorderInPast
-            ? "Reorder now — you've reached your threshold"
-            : `Reorder by: ${reorderByDate ? format(reorderByDate, 'MMMM d, yyyy') : '—'}`}
+          {product.currentQuantity === 0
+            ? 'Reorder now!'
+            : reorderInPast
+              ? "Reorder now — you've reached your threshold"
+              : `Reorder by: ${reorderByDate ? format(reorderByDate, 'MMMM d, yyyy') : '—'}`}
         </Text>
         {showMinimalThresholdWarning && !reorderInPast ? (
           <Text style={styles.warningText}>
@@ -936,6 +959,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.textPrimary,
   },
+  statTextRed: {
+    color: '#EF4444',
+  },
   thresholdDisplayText: {
     marginTop: 4,
     fontSize: 12,
@@ -956,6 +982,36 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  outOfStockBanner: {
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#EF4444',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  outOfStockContent: {
+    flex: 1,
+  },
+  outOfStockText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#B91C1C',
+  },
+  outOfStockBuyButton: {
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginLeft: 12,
+  },
+  outOfStockBuyText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
   updateStockButton: {
     height: 44,

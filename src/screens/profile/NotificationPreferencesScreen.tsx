@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
 import DateTimePicker, {
   DateTimePickerEvent,
 } from '@react-native-community/datetimepicker';
@@ -169,7 +168,6 @@ export default function NotificationPreferencesScreen() {
 
   return (
     <>
-      <StatusBar style="dark" />
       <View style={styles.screen}>
         <ScreenHeader title="Notifications" leftLabel="Back" />
 

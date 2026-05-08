@@ -8,7 +8,6 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
 import {
   RouteProp,
   useNavigation,
@@ -149,7 +148,6 @@ export default function LogPurchaseScreen() {
 
   return (
     <>
-      <StatusBar style="dark" />
       <ScreenWrapper contentContainerStyle={styles.content}>
       <View style={styles.headerRow}>
         <TouchableOpacity

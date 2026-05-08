@@ -6,7 +6,6 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
 import {
   useFocusEffect,
   useNavigation,
@@ -24,6 +23,7 @@ import {
   getProductUsagesForTask,
 } from '../../services/productService';
 import { recurrenceSummary } from '../../utils/recurrence';
+import { getFirstName } from '../../utils/nameUtils';
 import {
   Product,
   Task,
@@ -92,7 +92,6 @@ export default function CompletedTaskDetailScreen() {
   if (loading) {
     return (
       <>
-        <StatusBar style="dark" />
         <ScreenHeader title="" leftLabel="Back" />
         <View style={styles.center}>
           <ActivityIndicator size="large" color={Colors.primary} />
@@ -104,7 +103,6 @@ export default function CompletedTaskDetailScreen() {
   if (error) {
     return (
       <>
-        <StatusBar style="dark" />
         <ScreenHeader title="" leftLabel="Back" />
         <View style={styles.center}>
           <Text style={styles.errorText}>{error}</Text>
@@ -115,7 +113,6 @@ export default function CompletedTaskDetailScreen() {
 
   return (
     <>
-      <StatusBar style="dark" />
       <ScreenHeader title="" leftLabel="Back" />
       <ScrollView
         style={styles.screen}
@@ -140,7 +137,7 @@ export default function CompletedTaskDetailScreen() {
               </Text>
               {todayCompletion ? (
                 <Text style={styles.completedByText}>
-                  Completed by: {todayCompletion.displayName}
+                  Completed by: {getFirstName(todayCompletion.displayName)}
                 </Text>
               ) : null}
             </View>

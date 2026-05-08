@@ -7,7 +7,6 @@ import {
   StyleSheet,
   Platform,
 } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { format } from 'date-fns';
 import DateTimePicker, {
@@ -317,7 +316,6 @@ export default function AddTaskScreen() {
 
   return (
     <>
-      <StatusBar style="dark" />
       <ScreenHeader title="New Task" leftLabel="Back" onLeftPress={handleBack} />
       <ScreenWrapper contentContainerStyle={styles.content}>
         <TouchableOpacity

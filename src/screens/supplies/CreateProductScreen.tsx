@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
 import { useNavigation } from '@react-navigation/native';
 import ScreenWrapper from '../../components/ScreenWrapper';
 import ScreenHeader from '../../components/ScreenHeader';
@@ -61,16 +60,16 @@ export default function CreateProductScreen() {
     const thresholdValueN = Math.max(0, parseNumber(thresholdValue, 1));
 
     // Validate threshold
-    const effectiveThreshold = thresholdType === 'quantity'
-      ? thresholdValueN
-      : (thresholdValueN / 100) * qty;
-
-    if (effectiveThreshold <= 0) {
-      setError('Reorder threshold must be at least 1');
+    if (thresholdValueN < 0) {
+      setError('Threshold cannot be negative');
       return;
     }
-    if (effectiveThreshold >= qty) {
-      setError('Reorder threshold must be less than your current quantity');
+    if (thresholdType === 'quantity' && thresholdValueN > qty) {
+      setError('Threshold cannot exceed your current quantity');
+      return;
+    }
+    if (thresholdType === 'percentage' && thresholdValueN > 100) {
+      setError('Threshold percentage cannot exceed 100%');
       return;
     }
 
@@ -136,7 +135,6 @@ export default function CreateProductScreen() {
 
   return (
     <>
-      <StatusBar style="dark" />
       <ScreenHeader
         title="New Supply"
         leftLabel="Supplies"
@@ -269,6 +267,15 @@ export default function CreateProductScreen() {
                 {containerUnit.trim() || 'units'} remaining
               </Text>
             </View>
+            {parseNumber(currentQty, 0) === 1 && parseNumber(thresholdValue, 0) === 1 ? (
+              <Text style={styles.thresholdHelper}>
+                You'll be alerted when you're on your last one
+              </Text>
+            ) : parseNumber(currentQty, 0) === 0 ? (
+              <Text style={styles.thresholdHelper}>
+                You'll be alerted when you run out
+              </Text>
+            ) : null}
           </View>
         ) : (
           <View style={styles.thresholdInputSection}>

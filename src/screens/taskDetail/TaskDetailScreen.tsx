@@ -8,7 +8,6 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
 import {
   useFocusEffect,
   useNavigation,
@@ -534,7 +533,6 @@ export default function TaskDetailScreen() {
 
   return (
     <>
-      <StatusBar style="dark" />
       <ScreenHeader
         title=""
         leftLabel="Tasks"

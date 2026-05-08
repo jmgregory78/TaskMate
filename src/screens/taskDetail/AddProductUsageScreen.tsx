@@ -7,7 +7,6 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
 import {
   RouteProp,
   useNavigation,
@@ -341,7 +340,6 @@ export default function AddProductUsageScreen() {
 
   return (
     <>
-      <StatusBar style="dark" />
       {renderHeader('Add Supply')}
       <ScreenWrapper contentContainerStyle={styles.content}>
 
