@@ -99,6 +99,7 @@ interface SupplyGroup {
 }
 
 interface TaskDraft {
+  name: string;
   firstDue: Date;
   frequency: RecurrenceFrequency;
   intervalText: string;
@@ -376,6 +377,7 @@ export default function SetupWizardScreen() {
       for (const t of checkedTasks) {
         if (!next[t.id]) {
           next[t.id] = {
+            name: t.name,
             firstDue: new Date(),
             frequency: t.frequency,
             intervalText: String(t.interval),
@@ -417,7 +419,7 @@ export default function SetupWizardScreen() {
         userLabel,
         {
           householdId,
-          name: task.name,
+          name: draft.name.trim() || task.name,
           category: task.category,
           description: undefined,
           firstDueDate: draft.firstDue,
@@ -1138,9 +1140,19 @@ function ConfigureTaskStep({
           {task.icon ? (
             <Text style={styles.taskHeadingIcon}>{task.icon}</Text>
           ) : null}
-          <Text style={[styles.title, styles.nameText]} numberOfLines={2}>
-            {task.name}
-          </Text>
+          <TextInput
+            style={styles.nameInput}
+            value={draft.name}
+            onChangeText={(text) => onUpdateDraft({ name: text })}
+            placeholder="Enter task name"
+            placeholderTextColor="#9CA3AF"
+            returnKeyType="done"
+            maxLength={100}
+            editable={!submitting}
+          />
+          <View style={styles.pencilIcon}>
+            <Text style={styles.pencilEmoji}>✏️</Text>
+          </View>
         </View>
       </View>
       <ScrollView
@@ -2677,9 +2689,20 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
-  nameText: {
+  nameInput: {
     flex: 1,
-    marginBottom: 0,
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111827',
+    padding: 0,
+    margin: 0,
+  },
+  pencilIcon: {
+    padding: 4,
+  },
+  pencilEmoji: {
+    fontSize: 16,
+    opacity: 0.5,
   },
   fieldLabel: {
     fontSize: 14,

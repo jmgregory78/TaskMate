@@ -42,6 +42,7 @@ interface TaskGroup {
 }
 
 interface TaskDraft {
+  name: string;
   firstDue: Date;
   frequency: RecurrenceFrequency;
   intervalText: string;
@@ -227,6 +228,7 @@ export default function SuggestedTasksScreen() {
       for (const t of checkedTasks) {
         if (!next[t.id]) {
           next[t.id] = {
+            name: t.name,
             firstDue: new Date(),
             frequency: t.frequency,
             intervalText: String(t.interval),
@@ -289,7 +291,7 @@ export default function SuggestedTasksScreen() {
         userLabel,
         {
           householdId,
-          name: task.name,
+          name: draft.name.trim() || task.name,
           category: task.category,
           description: undefined,
           firstDueDate: draft.firstDue,
@@ -729,9 +731,17 @@ function ConfigureTaskStep({
           {task.icon ? (
             <Text style={styles.taskHeadingIcon}>{task.icon}</Text>
           ) : null}
-          <Text style={[styles.title, styles.nameText]} numberOfLines={2}>
-            {task.name}
-          </Text>
+          <TextInput
+            style={styles.nameInput}
+            value={draft.name}
+            onChangeText={(text) => onUpdateDraft({ name: text })}
+            placeholder="Enter task name"
+            placeholderTextColor="#9CA3AF"
+            returnKeyType="done"
+            maxLength={100}
+            editable={!submitting}
+          />
+          <Text style={styles.pencilEmoji}>✏️</Text>
         </View>
       </View>
       <ScrollView
@@ -1132,15 +1142,33 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   nameCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   taskHeadingIcon: {
     fontSize: 28,
     marginRight: 12,
   },
-  nameText: {
+  nameInput: {
     flex: 1,
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111827',
+    padding: 0,
+    margin: 0,
+  },
+  pencilEmoji: {
+    fontSize: 16,
+    opacity: 0.5,
+    paddingLeft: 8,
   },
   fieldLabel: {
     fontSize: 15,
