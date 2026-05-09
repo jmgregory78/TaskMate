@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
+  KeyboardAvoidingView,
   Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -326,56 +328,42 @@ export default function TaskAlertModal({
         }}
       >
         <View style={styles.confirmOverlay}>
-          <View style={styles.confirmCard}>
-            <Text style={styles.confirmTitle}>Mark as Complete?</Text>
-            <Text style={styles.confirmSubtitle}>{current.name}</Text>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          >
+            <View style={styles.confirmCard}>
+              <Text style={styles.confirmTitle}>Mark as Complete?</Text>
+              <Text style={styles.confirmSubtitle}>{current.name}</Text>
 
-            {!noteExpanded ? (
               <TouchableOpacity
                 onPress={() => setNoteExpanded(true)}
-                activeOpacity={0.7}
+                style={styles.addNoteLinkContainer}
               >
                 <Text style={styles.addNoteLink}>+ Add a note</Text>
               </TouchableOpacity>
-            ) : (
-              <View style={styles.noteContainer}>
-                <TextInput
-                  style={styles.noteInput}
-                  value={noteText}
-                  onChangeText={setNoteText}
-                  placeholder="What did you do? Any notes for next time?"
-                  placeholderTextColor="#9CA3AF"
-                  multiline
-                  autoFocus
-                />
-                <TouchableOpacity
-                  onPress={() => setRemindNextTime(!remindNextTime)}
-                  style={styles.remindRow}
-                  activeOpacity={0.7}
-                >
-                  <View style={[styles.checkbox, remindNextTime && styles.checkboxChecked]}>
-                    {remindNextTime ? <Text style={styles.checkboxMark}>✓</Text> : null}
-                  </View>
-                  <Text style={styles.remindText}>
-                    Remind me of this next time
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
 
-            <View style={styles.confirmButtonRow}>
-              <TouchableOpacity
-                style={styles.confirmCancelBtn}
-                onPress={() => {
-                  setShowConfirmModal(false);
-                  setNoteExpanded(false);
-                  setNoteText('');
-                  setRemindNextTime(false);
-                }}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.confirmCancelBtnText}>Cancel</Text>
-              </TouchableOpacity>
+              {noteExpanded && (
+                <View style={styles.noteContainer}>
+                  <TextInput
+                    style={styles.noteInput}
+                    value={noteText}
+                    onChangeText={setNoteText}
+                    placeholder="Notes for next time..."
+                    placeholderTextColor="#9CA3AF"
+                    multiline
+                    autoFocus
+                  />
+                  <TouchableOpacity
+                    onPress={() => setRemindNextTime(!remindNextTime)}
+                    style={styles.remindRow}
+                  >
+                    <View style={[styles.checkbox, remindNextTime && styles.checkboxChecked]}>
+                      {remindNextTime && <Text style={styles.checkboxMark}>✓</Text>}
+                    </View>
+                    <Text style={styles.remindText}>Remind me next time</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
 
               <TouchableOpacity
                 style={[styles.confirmBtn, isCompletingRef.current && styles.disabled]}
@@ -386,12 +374,23 @@ export default function TaskAlertModal({
                   onComplete(current, noteText.trim(), remindNextTime);
                 }}
                 disabled={isCompletingRef.current}
-                activeOpacity={0.85}
               >
-                <Text style={styles.confirmBtnText}>Confirm & Complete</Text>
+                <Text style={styles.confirmBtnText}>Confirm</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => {
+                  setShowConfirmModal(false);
+                  setNoteExpanded(false);
+                  setNoteText('');
+                  setRemindNextTime(false);
+                }}
+              >
+                <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
     </Modal>
@@ -597,28 +596,33 @@ const styles = StyleSheet.create({
   // Confirmation Modal styles
   confirmOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
+    alignItems: 'stretch',
+    paddingHorizontal: 16,
   },
   confirmCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 24,
-    width: '100%',
-    gap: 16,
+    borderRadius: 20,
+    paddingVertical: 28,
+    paddingHorizontal: 24,
+    alignItems: 'center',
   },
   confirmTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     color: '#111827',
     textAlign: 'center',
+    marginBottom: 8,
   },
   confirmSubtitle: {
     fontSize: 15,
     color: '#6B7280',
     textAlign: 'center',
+    marginBottom: 16,
+  },
+  addNoteLinkContainer: {
+    marginBottom: 20,
   },
   addNoteLink: {
     color: '#0D9488',
@@ -626,27 +630,31 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   noteContainer: {
-    gap: 8,
+    width: '100%',
+    marginBottom: 20,
   },
   noteInput: {
-    borderWidth: 1,
+    width: '100%',
+    minWidth: '100%',
+    borderWidth: 1.5,
     borderColor: '#E5E7EB',
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 12,
-    minHeight: 80,
+    height: 100,
     fontSize: 14,
     color: '#111827',
     textAlignVertical: 'top',
+    backgroundColor: '#F9FAFB',
+    marginBottom: 10,
   },
   remindRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginTop: 4,
   },
   checkbox: {
-    width: 20,
-    height: 20,
+    width: 18,
+    height: 18,
     borderRadius: 4,
     borderWidth: 2,
     borderColor: '#0D9488',
@@ -658,41 +666,38 @@ const styles = StyleSheet.create({
   },
   checkboxMark: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
   },
   remindText: {
     fontSize: 13,
     color: '#6B7280',
   },
-  confirmButtonRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 8,
-  },
-  confirmCancelBtn: {
-    flex: 1,
-    padding: 14,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    alignItems: 'center',
-  },
-  confirmCancelBtnText: {
-    color: '#6B7280',
-    fontSize: 15,
-    fontWeight: '600',
-  },
   confirmBtn: {
-    flex: 1,
-    padding: 14,
-    borderRadius: 10,
+    width: '100%',
+    paddingVertical: 16,
+    borderRadius: 14,
     backgroundColor: '#0D9488',
     alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
   },
   confirmBtnText: {
     color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  cancelBtn: {
+    width: '100%',
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelBtnText: {
+    color: '#9CA3AF',
     fontSize: 15,
-    fontWeight: '600',
+    textAlign: 'center',
+    fontWeight: '500',
   },
 });
