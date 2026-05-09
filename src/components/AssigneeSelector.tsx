@@ -33,20 +33,20 @@ interface SheetProps {
   onClose: () => void;
 }
 
-function initialsFor(displayName: string | null, email: string): string {
-  if (displayName && displayName.trim().length > 0) {
+function initialsFor(displayName: string | null): string {
+  if (displayName && displayName.trim().length > 0 && !displayName.includes('@')) {
     const parts = displayName.trim().split(/\s+/).slice(0, 2);
     if (parts.length === 1) return parts[0][0]?.toUpperCase() ?? '?';
     return (parts[0][0] + parts[1][0]).toUpperCase();
   }
-  if (email && email.length > 0) return email[0].toUpperCase();
   return '?';
 }
 
 function memberName(m: HouseholdMember): string {
-  return m.displayName && m.displayName.trim().length > 0
-    ? m.displayName
-    : m.email || m.userId;
+  if (m.displayName && m.displayName.trim().length > 0 && !m.displayName.includes('@')) {
+    return m.displayName;
+  }
+  return 'A member';
 }
 
 function roleLabel(role: HouseholdMember['role']): string {
@@ -131,7 +131,7 @@ export function AssigneePickerSheet({
                 >
                   <View style={styles.avatar}>
                     <Text style={styles.avatarText}>
-                      {initialsFor(m.displayName, m.email)}
+                      {initialsFor(m.displayName)}
                     </Text>
                   </View>
                   <View style={styles.memberMain}>
@@ -177,7 +177,7 @@ export default function AssigneeSelector({
           <>
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>
-                {initialsFor(currentAssignee.name, currentAssignee.name)}
+                {initialsFor(currentAssignee.name)}
               </Text>
             </View>
             <Text style={styles.assigneeName}>

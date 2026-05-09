@@ -25,7 +25,7 @@ import {
   scheduleAllTaskReminders,
   scheduleSnoozeNotification,
 } from '../../services/notificationService';
-import { Product, stockPercent, Task } from '../../types/models';
+import { Product, serializeTask, stockPercent, Task } from '../../types/models';
 import { getFirstName } from '../../utils/nameUtils';
 import UserAvatar from '../../components/UserAvatar';
 import TaskAlertModal from '../../components/TaskAlertModal';
@@ -232,7 +232,9 @@ export default function HomeScreen() {
 
   const today = new Date();
   const firstName = getFirstName(
-    currentUser?.displayName ?? currentUser?.email ?? null
+    currentUser?.displayName && !currentUser.displayName.includes('@')
+      ? currentUser.displayName
+      : null
   );
   const rating = calculateStarRating(tasks, products);
 
@@ -273,7 +275,9 @@ export default function HomeScreen() {
       remindNextTime,
     });
     const displayName =
-      currentUser.displayName ?? currentUser.email ?? currentUser.uid;
+      currentUser.displayName && !currentUser.displayName.includes('@')
+        ? currentUser.displayName
+        : 'You';
     try {
       await completeTask(householdId, task.id, currentUser.uid, undefined, {
         completionNote: completionNote ?? '',
@@ -580,13 +584,20 @@ export default function HomeScreen() {
                 </View>
                 <View style={styles.listCard}>
                   {recentlyCompleted.map((t, idx) => (
-                    <View
+                    <TouchableOpacity
                       key={t.id}
                       style={[
                         styles.taskRow,
                         idx < recentlyCompleted.length - 1 &&
                           styles.taskRowDivider,
                       ]}
+                      onPress={() =>
+                        navigation.navigate('CompletedTaskDetail', {
+                          taskId: t.id,
+                          task: serializeTask(t),
+                        })
+                      }
+                      activeOpacity={0.7}
                     >
                       <Text style={styles.taskRowIcon}>✅</Text>
                       <View style={styles.completedMain}>
@@ -596,13 +607,19 @@ export default function HomeScreen() {
                         >
                           {t.name}
                         </Text>
-                        {t.lastCompletedBy ? (
+                        {(t.lastCompletedByName || t.lastCompletedBy) ? (
                           <Text style={styles.completedBy}>
-                            Completed by {getFirstName(t.lastCompletedBy)}
+                            Completed by {getFirstName(
+                              t.lastCompletedByName && !t.lastCompletedByName.includes('@')
+                                ? t.lastCompletedByName
+                                : currentUser?.displayName && !currentUser.displayName.includes('@')
+                                  ? currentUser.displayName
+                                  : 'You'
+                            )}
                           </Text>
                         ) : null}
                       </View>
-                    </View>
+                    </TouchableOpacity>
                   ))}
                 </View>
               </>

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,8 @@ import {
   RouteProp,
 } from '@react-navigation/native';
 import { format } from 'date-fns';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../../config/firebase';
 import { useAppStore } from '../../stores/appStore';
 import {
   getCompletions,
@@ -25,7 +27,9 @@ import {
 import { recurrenceSummary } from '../../utils/recurrence';
 import { getFirstName } from '../../utils/nameUtils';
 import {
+  deserializeTask,
   Product,
+  SerializedTask,
   Task,
   TaskCompletion,
   TaskProductUsage,
@@ -34,23 +38,59 @@ import InventoryBar from '../../components/InventoryBar';
 import ScreenHeader from '../../components/ScreenHeader';
 import { Colors } from '../../constants/colors';
 
+/**
+ * Get a display-friendly name for the user who completed the task.
+ * Never returns a raw UID or email address.
+ */
+async function getCompletedByName(
+  completedBy: string,
+  displayName?: string
+): Promise<string> {
+  // If displayName is already valid (not empty, not an email, not too short)
+  if (
+    displayName &&
+    !displayName.includes('@') &&
+    displayName.trim().length >= 2
+  ) {
+    return getFirstName(displayName);
+  }
+
+  // Try to look up the user by UID
+  try {
+    const userDoc = await getDoc(doc(db, 'users', completedBy));
+    if (userDoc.exists()) {
+      const userData = userDoc.data();
+      const name = userData?.displayName;
+      if (name && !name.includes('@') && name.trim().length >= 2) {
+        return getFirstName(name);
+      }
+    }
+  } catch (e) {
+    // Ignore lookup errors
+  }
+
+  // Final fallback - never show UID or email
+  return 'You';
+}
+
 type CompletedTaskDetailRoute = RouteProp<
-  { CompletedTaskDetail: { taskId: string; task: Task } },
+  { CompletedTaskDetail: { taskId: string; task: SerializedTask } },
   'CompletedTaskDetail'
 >;
 
 export default function CompletedTaskDetailScreen() {
   const navigation = useNavigation();
   const route = useRoute<CompletedTaskDetailRoute>();
-  const { taskId, task: initialTask } = route.params;
+  const { taskId, task: serializedTask } = route.params;
   const householdId = useAppStore((s) => s.currentHouseholdId);
 
-  const [task, setTask] = useState<Task>(initialTask);
+  const [task, setTask] = useState<Task>(() => deserializeTask(serializedTask));
   const [completions, setCompletions] = useState<TaskCompletion[]>([]);
   const [productUsages, setProductUsages] = useState<TaskProductUsage[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [completedByName, setCompletedByName] = useState<string>('You');
 
   useFocusEffect(
     useCallback(() => {
@@ -88,6 +128,14 @@ export default function CompletedTaskDetailScreen() {
 
   // Get the most recent completion (today's completion)
   const todayCompletion = completions.length > 0 ? completions[0] : null;
+
+  // Resolve the display name for the person who completed the task
+  useEffect(() => {
+    if (!todayCompletion) return;
+    getCompletedByName(todayCompletion.completedBy, todayCompletion.displayName)
+      .then(setCompletedByName)
+      .catch(() => setCompletedByName('You'));
+  }, [todayCompletion]);
 
   if (loading) {
     return (
@@ -137,7 +185,7 @@ export default function CompletedTaskDetailScreen() {
               </Text>
               {todayCompletion ? (
                 <Text style={styles.completedByText}>
-                  Completed by: {getFirstName(todayCompletion.displayName)}
+                  Completed by: {completedByName}
                 </Text>
               ) : null}
             </View>

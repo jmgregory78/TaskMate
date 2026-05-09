@@ -56,12 +56,24 @@ import NotificationPreferencesScreen from '../screens/profile/NotificationPrefer
 import PendingPurchasePrompt, {
   PendingItem,
 } from '../components/PendingPurchasePrompt';
+import DisplayNameRequiredModal from '../components/DisplayNameRequiredModal';
 import SplashScreen from '../screens/SplashScreen';
+
+function needsDisplayName(displayName: string | null | undefined): boolean {
+  // No name set
+  if (!displayName || displayName.trim() === '') return true;
+  // Name looks like an email
+  if (displayName.includes('@')) return true;
+  // Name too short
+  if (displayName.trim().length < 2) return true;
+  return false;
+}
 import { navigationRef } from './navigationRef';
 import { Colors } from '../constants/colors';
 import type {
   Product,
   RecurrenceFrequency,
+  SerializedTask,
   Task,
   TaskCategory,
 } from '../types/models';
@@ -96,7 +108,7 @@ export type AppStackParamList = {
     | undefined;
   SuggestedTasks: { preSelected?: string } | undefined;
   TaskDetail: { taskId: string };
-  CompletedTaskDetail: { taskId: string; task: Task };
+  CompletedTaskDetail: { taskId: string; task: SerializedTask };
   EditTask: { taskId: string; householdId: string };
   AddProductUsage: { householdId: string; taskId: string };
   LogPurchase: { householdId: string; productId: string };
@@ -283,6 +295,24 @@ export default function RootNavigator() {
   const [checkedForUid, setCheckedForUid] = useState<string | null>(null);
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   const [setupWizardChecked, setSetupWizardChecked] = useState(false);
+  const [showDisplayNameModal, setShowDisplayNameModal] = useState(false);
+  const [displayNameChecked, setDisplayNameChecked] = useState(false);
+
+  // Check if user needs to set display name
+  useEffect(() => {
+    if (!user?.uid || !currentHouseholdId) {
+      setDisplayNameChecked(false);
+      setShowDisplayNameModal(false);
+      return;
+    }
+    if (displayNameChecked) return;
+
+    // Check if display name is needed
+    if (needsDisplayName(user.displayName)) {
+      setShowDisplayNameModal(true);
+    }
+    setDisplayNameChecked(true);
+  }, [user?.uid, user?.displayName, currentHouseholdId, displayNameChecked]);
 
   useEffect(() => {
     if (!user?.uid || !currentHouseholdId) {
@@ -575,19 +605,32 @@ export default function RootNavigator() {
         />
       ) : null}
       <SplashScreen visible={splashVisible} />
+      <DisplayNameRequiredModal
+        visible={
+          !!user &&
+          !!currentHouseholdId &&
+          showDisplayNameModal &&
+          !splashVisible &&
+          !showOnboarding
+        }
+        onComplete={() => {
+          setShowDisplayNameModal(false);
+        }}
+      />
       <Modal
         visible={
           !!user &&
           !!currentHouseholdId &&
           showOnboarding &&
-          !splashVisible
+          !splashVisible &&
+          !showDisplayNameModal
         }
         animationType="slide"
         transparent={false}
       >
         {user && currentHouseholdId ? (
           <OnboardingScreen
-            firstName={getFirstName(user.displayName ?? user.email)}
+            firstName={getFirstName(user.displayName ?? 'there')}
             onComplete={() => {
               void markOnboardingComplete(user.uid).catch((e) => {
                 console.warn(

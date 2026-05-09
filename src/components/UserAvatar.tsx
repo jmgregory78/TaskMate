@@ -35,13 +35,12 @@ interface AvatarProps {
   fontSize?: number;
 }
 
-function initialsFor(displayName: string | null, email: string): string {
-  if (displayName && displayName.trim().length > 0) {
+function initialsFor(displayName: string | null): string {
+  if (displayName && displayName.trim().length > 0 && !displayName.includes('@')) {
     const parts = displayName.trim().split(/\s+/).slice(0, 2);
     if (parts.length === 1) return parts[0][0]?.toUpperCase() ?? '?';
     return (parts[0][0] + parts[1][0]).toUpperCase();
   }
-  if (email && email.length > 0) return email[0].toUpperCase();
   return '?';
 }
 
@@ -91,7 +90,7 @@ export default function UserAvatar({
   }, [user?.uid, householdId]);
 
   if (!user) return null;
-  const letters = initialsFor(user.displayName, user.email);
+  const letters = initialsFor(user.displayName);
 
   return (
     <>
@@ -254,13 +253,10 @@ function ProfileDropdown({
       >
         <View style={styles.dropdownHeader}>
           <Text style={styles.dropdownName} numberOfLines={1}>
-            {user.displayName ?? user.email ?? 'User'}
+            {user.displayName && !user.displayName.includes('@')
+              ? user.displayName
+              : 'User'}
           </Text>
-          {user.email ? (
-            <Text style={styles.dropdownEmail} numberOfLines={1}>
-              {user.email}
-            </Text>
-          ) : null}
         </View>
 
         <DropdownItem

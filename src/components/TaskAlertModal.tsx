@@ -80,6 +80,9 @@ export default function TaskAlertModal({
   const [snoozeOpen, setSnoozeOpen] = useState(false);
   const [completionNoteOpen, setCompletionNoteOpen] = useState(false);
 
+  // Guard to prevent multiple completion calls from rapid taps
+  const isCompletingRef = useRef(false);
+
   useEffect(() => {
     if (visible) {
       Animated.spring(slideAnim, {
@@ -93,6 +96,8 @@ export default function TaskAlertModal({
       setIndex(0);
       setSnoozeOpen(false);
       setCompletionNoteOpen(false);
+      // Reset the guard when modal is dismissed
+      isCompletingRef.current = false;
     }
   }, [visible, slideAnim]);
 
@@ -260,11 +265,13 @@ export default function TaskAlertModal({
 
           <View style={styles.actionRow}>
             <TouchableOpacity
-              style={styles.completeButton}
+              style={[styles.completeButton, isCompletingRef.current && styles.disabled]}
               onPress={() => {
+                if (isCompletingRef.current) return;
                 console.log('[TaskAlertModal] Opening completion note modal for task:', current.id);
                 setCompletionNoteOpen(true);
               }}
+              disabled={isCompletingRef.current}
               activeOpacity={0.85}
             >
               <Text style={styles.actionText}>✅ Mark Complete</Text>
@@ -303,10 +310,14 @@ export default function TaskAlertModal({
         taskName={current.name}
         taskIcon={current.icon}
         onSave={(note, remindNextTime) => {
+          if (isCompletingRef.current) return;
+          isCompletingRef.current = true;
           setCompletionNoteOpen(false);
           onComplete(current, note, remindNextTime);
         }}
         onSkip={() => {
+          if (isCompletingRef.current) return;
+          isCompletingRef.current = true;
           setCompletionNoteOpen(false);
           onComplete(current, '', false);
         }}
@@ -453,6 +464,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
+  },
+  disabled: {
+    opacity: 0.5,
   },
   openButton: {
     flex: 1,

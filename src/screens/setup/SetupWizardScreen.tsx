@@ -412,7 +412,7 @@ export default function SetupWizardScreen() {
     if (!draft) return;
     setSubmitting(true);
     setSubmitError(null);
-    const userLabel = user.displayName ?? user.email ?? user.uid;
+    const userLabel = user.displayName && !user.displayName.includes('@') ? user.displayName : 'You';
     try {
       const newTaskId = await createTask(
         householdId,
@@ -485,7 +485,7 @@ export default function SetupWizardScreen() {
   }) => {
     if (supplyPrompt?.scenario !== 'add') return;
     if (!user || !householdId) return;
-    const userLabel = user.displayName ?? user.email ?? user.uid;
+    const userLabel = user.displayName && !user.displayName.includes('@') ? user.displayName : 'You';
     const supply = supplyPrompt.supply;
     const taskId = supplyPrompt.taskId;
     try {
@@ -629,7 +629,7 @@ export default function SetupWizardScreen() {
     }
     setSubmitting(true);
     setSubmitError(null);
-    const userLabel = user.displayName ?? user.email ?? user.uid;
+    const userLabel = user.displayName && !user.displayName.includes('@') ? user.displayName : 'You';
     try {
       await Promise.all(
         checkedSupplies

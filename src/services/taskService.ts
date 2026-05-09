@@ -10,6 +10,7 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   Timestamp,
   updateDoc,
   where,
@@ -40,6 +41,7 @@ type CreateTaskInput = Omit<
   | 'nextDueDate'
   | 'lastCompletedAt'
   | 'lastCompletedBy'
+  | 'lastCompletedByName'
   | 'completedToday'
   | 'completedAt'
   | 'assignedTo'
@@ -126,6 +128,7 @@ function mapTaskDoc(id: string, data: any): Task {
     nextDueDate: toDate(data.nextDueDate),
     lastCompletedAt: toDateOrNull(data.lastCompletedAt),
     lastCompletedBy: data.lastCompletedBy ?? null,
+    lastCompletedByName: data.lastCompletedByName ?? null,
     hasInventory: !!data.hasInventory,
     instructions: null,
     icon: typeof data.icon === 'string' ? data.icon : undefined,
@@ -154,6 +157,11 @@ function mapTaskDoc(id: string, data: any): Task {
       typeof data.lastCompletionNote === 'string'
         ? data.lastCompletionNote
         : undefined,
+    completedOccurrences:
+      typeof data.completedOccurrences === 'number'
+        ? data.completedOccurrences
+        : undefined,
+    isEnded: !!data.isEnded,
   };
 }
 
@@ -183,6 +191,7 @@ export async function createTask(
     nextDueDate: Timestamp.fromDate(data.firstDueDate),
     lastCompletedAt: null,
     lastCompletedBy: null,
+    lastCompletedByName: null,
     hasInventory: data.hasInventory,
     instructions: null,
     icon,
@@ -203,6 +212,8 @@ export async function createTask(
     notes: data.notes ?? null,
     nextTimeReminder: null,
     lastCompletionNote: null,
+    completedOccurrences: 0,
+    isEnded: false,
   });
   await logActivity(householdId, ref.id, 'created', userId);
   return ref.id;
@@ -362,8 +373,10 @@ export async function completeTask(
   note?: string,
   options?: CompleteTaskOptions
 ): Promise<Date> {
+  console.log('[completeTask] Starting for task:', taskId);
   const task = await getTask(householdId, taskId);
   if (!task) throw new Error('Task not found');
+  console.log('[completeTask] Task found:', task.name);
 
   // Cancel any pending snooze notification for this task
   if (task.pendingNotificationId) {
@@ -375,68 +388,181 @@ export async function completeTask(
   }
 
   const completedAt = new Date();
-  const nextDueDate = computeNextDueDate(completedAt, task.recurrence);
+
+  // Safely compute next due date with fallback
+  let nextDueDate: Date;
+  try {
+    // Check if recurrence exists and is valid
+    if (!task.recurrence || !task.recurrence.frequency) {
+      console.log('[completeTask] No valid recurrence, using 30 days default');
+      // One-time or invalid task: default to 30 days from now
+      nextDueDate = new Date(completedAt);
+      nextDueDate.setDate(nextDueDate.getDate() + 30);
+    } else {
+      console.log('[completeTask] Computing next due date with recurrence:', task.recurrence);
+      nextDueDate = computeNextDueDate(completedAt, task.recurrence);
+    }
+  } catch (recurrenceError: any) {
+    console.error('[completeTask] Error computing next due date:', recurrenceError?.message);
+    // Fallback to 30 days if computation fails
+    nextDueDate = new Date(completedAt);
+    nextDueDate.setDate(nextDueDate.getDate() + 30);
+  }
+  console.log('[completeTask] Next due date calculated:', nextDueDate.toISOString());
+  console.log('[completeTask] Recurrence:', JSON.stringify(task.recurrence));
   const ref = doc(db, 'households', householdId, 'tasks', taskId);
 
   const completionNote = options?.completionNote ?? '';
   const remindNextTime = options?.remindNextTime ?? false;
   const displayName = options?.displayName ?? userId;
 
-  // Update task document
-  const updatePayload: Record<string, unknown> = {
+  // Increment completed occurrences
+  const newCompletedOccurrences = (task.completedOccurrences ?? 0) + 1;
+
+  // Check end conditions
+  let taskEnded = false;
+  const endType = task.recurrence?.endType;
+
+  if (endType === 'afterOccurrences') {
+    const maxOccurrences = task.recurrence?.endAfterOccurrences ?? 0;
+    if (maxOccurrences > 0 && newCompletedOccurrences >= maxOccurrences) {
+      taskEnded = true;
+      console.log('[completeTask] Task ended - max occurrences reached:', newCompletedOccurrences, '/', maxOccurrences);
+    }
+  }
+
+  if (endType === 'byDate') {
+    const endByDate = task.recurrence?.endByDate;
+    if (endByDate && nextDueDate > endByDate) {
+      taskEnded = true;
+      console.log('[completeTask] Task ended - next due date exceeds end date:', nextDueDate, '>', endByDate);
+    }
+  }
+
+  // Mark original task as completed (keep original dueDate, just mark status)
+  const completionPayload: Record<string, unknown> = {
     lastCompletedAt: Timestamp.fromDate(completedAt),
     lastCompletedBy: userId,
+    lastCompletedByName: displayName,
     completedAt: Timestamp.fromDate(completedAt),
     completedToday: true,
-    nextDueDate: Timestamp.fromDate(nextDueDate),
+    status: 'completed',
     snoozedUntil: null,
     pendingNotificationId: null,
     lastCompletionNote: completionNote || null,
+    completedOccurrences: newCompletedOccurrences,
+    isEnded: taskEnded,
   };
 
-  // Set or clear nextTimeReminder based on checkbox
-  if (remindNextTime && completionNote) {
-    updatePayload.nextTimeReminder = completionNote;
-  } else if (!remindNextTime) {
-    // Only clear if not checked - preserve existing if no note but checked
-    updatePayload.nextTimeReminder = null;
+  console.log('[completeTask] Marking original task as completed');
+  await updateDoc(ref, completionPayload);
+  console.log('[completeTask] Original task marked completed');
+
+  // Write to completions subcollection on original task
+  try {
+    const completionsRef = collection(
+      db,
+      'households',
+      householdId,
+      'tasks',
+      taskId,
+      'completions'
+    );
+    await addDoc(completionsRef, {
+      completedAt: Timestamp.fromDate(completedAt),
+      completedBy: userId,
+      displayName,
+      note: completionNote,
+      remindNextTime,
+    });
+    console.log('[completeTask] Completion record written');
+  } catch (completionError: any) {
+    console.warn('[completeTask] Failed to write completion record:', completionError?.message);
+    // Don't throw - task is already marked complete
   }
 
-  await updateDoc(ref, updatePayload);
+  try {
+    await logActivity(householdId, taskId, 'completed', userId, note);
+    console.log('[completeTask] Activity logged');
+  } catch (activityError: any) {
+    console.warn('[completeTask] Failed to log activity:', activityError?.message);
+    // Don't throw - task is already marked complete
+  }
 
-  // Write to completions subcollection
-  const completionsRef = collection(
-    db,
-    'households',
-    householdId,
-    'tasks',
-    taskId,
-    'completions'
-  );
-  await addDoc(completionsRef, {
-    completedAt: Timestamp.fromDate(completedAt),
-    completedBy: userId,
-    displayName,
-    note: completionNote,
-    remindNextTime,
-  });
+  // Create NEW pending task for next occurrence (unless task has ended)
+  if (!taskEnded) {
+    try {
+      const newTaskRef = doc(collection(db, 'households', householdId, 'tasks'));
 
-  await logActivity(householdId, taskId, 'completed', userId, note);
+      // Determine nextTimeReminder for new task
+      let newNextTimeReminder: string | null = null;
+      if (remindNextTime && completionNote) {
+        newNextTimeReminder = completionNote;
+      }
+
+      await setDoc(newTaskRef, {
+        householdId: task.householdId,
+        name: task.name,
+        category: task.category,
+        location: task.location ?? null,
+        description: task.description ?? null,
+        firstDueDate: Timestamp.fromDate(task.firstDueDate),
+        recurrence: serializeRecurrence(task.recurrence),
+        nextDueDate: Timestamp.fromDate(nextDueDate),
+        lastCompletedAt: Timestamp.fromDate(completedAt),
+        lastCompletedBy: userId,
+        lastCompletedByName: displayName,
+        hasInventory: task.hasInventory,
+        instructions: null,
+        icon: task.icon ?? null,
+        completedToday: false,
+        completedAt: null,
+        status: 'pending',
+        createdAt: serverTimestamp(),
+        createdBy: task.createdBy,
+        assignedTo: task.assignedTo,
+        assignedToName: task.assignedToName,
+        assignedAt: task.assignedAt ? Timestamp.fromDate(task.assignedAt) : null,
+        assignedBy: task.assignedBy,
+        reminderDaysBefore: task.reminderDaysBefore,
+        snoozedUntil: null,
+        pendingNotificationId: null,
+        notes: task.notes ?? null,
+        nextTimeReminder: newNextTimeReminder,
+        lastCompletionNote: completionNote || null,
+        completedOccurrences: newCompletedOccurrences,
+        isEnded: false,
+      });
+
+      console.log('[completeTask] New occurrence created for:', task.name, nextDueDate.toISOString());
+    } catch (newTaskError: any) {
+      console.error('[completeTask] Failed to create next occurrence:', newTaskError?.message);
+      // This is more serious - log but don't throw since original is marked complete
+    }
+  } else {
+    console.log('[completeTask] Task ended, no new occurrence created');
+  }
 
   // Deduct linked product usage when task is completed (unless skipped)
   if (!options?.skipInventoryDeduction) {
     try {
       const usages = await getProductUsagesForTask(householdId, taskId);
-      await Promise.all(
-        usages.map((usage) =>
-          deductProductUsage(householdId, usage.productId, usage.usageAmount, task.name)
-        )
-      );
-    } catch (e) {
-      console.warn('[completeTask] Failed to deduct product usage:', e);
+      if (usages.length > 0) {
+        console.log('[completeTask] Deducting inventory for', usages.length, 'products');
+        await Promise.all(
+          usages.map((usage) =>
+            deductProductUsage(householdId, usage.productId, usage.usageAmount, task.name)
+          )
+        );
+        console.log('[completeTask] Inventory deducted');
+      }
+    } catch (e: any) {
+      console.warn('[completeTask] Failed to deduct product usage:', e?.message);
+      // Don't throw - task is already marked complete
     }
   }
 
+  console.log('[completeTask] Complete!');
   return nextDueDate;
 }
 
@@ -448,13 +574,16 @@ export async function resetCompletedToday(householdId: string): Promise<void> {
     where('completedToday', '==', true)
   );
   const snap = await getDocs(q);
+  const tasksToReset = snap.docs.filter((d) => {
+    const completedAt = toDateOrNull(d.data().completedAt);
+    return completedAt !== null && completedAt < startOfToday;
+  });
+  console.log('[resetCompletedToday] Found', snap.docs.length, 'completed tasks,', tasksToReset.length, 'need reset');
   await Promise.all(
-    snap.docs
-      .filter((d) => {
-        const completedAt = toDateOrNull(d.data().completedAt);
-        return completedAt !== null && completedAt < startOfToday;
-      })
-      .map((d) => updateDoc(d.ref, { completedToday: false }))
+    tasksToReset.map((d) => {
+      console.log('[resetCompletedToday] Resetting task:', d.id, d.data().name);
+      return updateDoc(d.ref, { completedToday: false });
+    })
   );
 }
 

@@ -75,7 +75,7 @@ export default function CreateProductScreen() {
 
     setSubmitting(true);
     try {
-      await createProduct(householdId, user.displayName ?? user.email ?? user.uid, {
+      await createProduct(householdId, user.displayName && !user.displayName.includes('@') ? user.displayName : 'You', {
         householdId,
         name: trimmedName,
         amazonUrl: purchaseUrl.trim(),

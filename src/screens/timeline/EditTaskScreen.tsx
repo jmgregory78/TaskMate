@@ -321,14 +321,14 @@ export default function EditTaskScreen() {
           assignee?.userId ?? null,
           assignee?.name ?? null,
           user.uid,
-          user.displayName ?? user.email ?? user.uid
+          user.displayName && !user.displayName.includes('@') ? user.displayName : 'You'
         );
         if (assignee && assignee.userId !== user.uid) {
           void sendAssignmentNotification(
             assignee.userId,
             task.name,
             task.icon ?? '📋',
-            getFirstName(user.displayName ?? user.email ?? user.uid),
+            getFirstName(user.displayName && !user.displayName.includes('@') ? user.displayName : 'You'),
             householdId,
             taskId
           );
@@ -339,7 +339,7 @@ export default function EditTaskScreen() {
           householdId,
           taskId,
           'edited',
-          user.displayName ?? user.email ?? user.uid
+          user.displayName && !user.displayName.includes('@') ? user.displayName : 'You'
         );
       }
       navigation.goBack();

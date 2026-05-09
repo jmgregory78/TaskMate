@@ -123,7 +123,7 @@ export default function AddTaskScreen() {
     user
       ? {
           userId: user.uid,
-          name: user.displayName ?? user.email ?? user.uid,
+          name: user.displayName && !user.displayName.includes('@') ? user.displayName : 'You',
         }
       : null
   );
@@ -137,7 +137,7 @@ export default function AddTaskScreen() {
         ? prev
         : {
             userId: user.uid,
-            name: user.displayName ?? user.email ?? user.uid,
+            name: user.displayName && !user.displayName.includes('@') ? user.displayName : 'You',
           }
     );
   }, [user]);
@@ -268,7 +268,7 @@ export default function AddTaskScreen() {
     try {
       const taskId = await createTask(
         householdId,
-        user.displayName ?? user.email ?? user.uid,
+        user.displayName && !user.displayName.includes('@') ? user.displayName : 'You',
         {
           householdId,
           name: trimmedName,

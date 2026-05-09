@@ -46,13 +46,12 @@ import ScreenHeader from '../../components/ScreenHeader';
 import { getFirstName } from '../../utils/nameUtils';
 import { Colors } from '../../constants/colors';
 
-function initialsFor(displayName: string | null, email: string): string {
-  if (displayName && displayName.trim().length > 0) {
+function initialsFor(displayName: string | null): string {
+  if (displayName && displayName.trim().length > 0 && !displayName.includes('@')) {
     const parts = displayName.trim().split(/\s+/).slice(0, 2);
     if (parts.length === 1) return parts[0][0]?.toUpperCase() ?? '?';
     return (parts[0][0] + parts[1][0]).toUpperCase();
   }
-  if (email && email.length > 0) return email[0].toUpperCase();
   return '?';
 }
 
@@ -290,7 +289,7 @@ export default function HouseholdSettingsScreen() {
   const handleMemberAction = (member: HouseholdMember) => {
     if (!householdId || !isOwner || member.userId === currentUser?.uid) return;
     Alert.alert(
-      member.email || member.userId,
+      member.displayName && !member.displayName.includes('@') ? member.displayName : 'A member',
       `Manage ${roleLabel(member.role)}`,
       [
         {
@@ -452,12 +451,12 @@ export default function HouseholdSettingsScreen() {
                 >
                   <View style={styles.avatar}>
                     <Text style={styles.avatarText}>
-                      {initialsFor(m.displayName, m.email)}
+                      {initialsFor(m.displayName)}
                     </Text>
                   </View>
                   <View style={styles.memberMain}>
                     <Text style={styles.memberEmail}>
-                      {getFirstName(m.displayName ?? m.email ?? m.userId)}
+                      {m.displayName && !m.displayName.includes('@') ? getFirstName(m.displayName) : 'A member'}
                     </Text>
                   </View>
                   <View
@@ -586,7 +585,7 @@ export default function HouseholdSettingsScreen() {
           visible={inviteSheetVisible}
           householdId={householdId}
           householdName={household?.name ?? ''}
-          createdBy={currentUser.email ?? currentUser.uid}
+          createdBy={currentUser.displayName && !currentUser.displayName.includes('@') ? currentUser.displayName : 'You'}
           onCancel={() => setInviteSheetVisible(false)}
           onInviteCreated={load}
         />

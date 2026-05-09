@@ -284,7 +284,9 @@ export default function SuggestedTasksScreen() {
     if (!draft) return;
     setSubmitting(true);
     setSubmitError(null);
-    const userLabel = user.displayName ?? user.email ?? user.uid;
+    const userLabel = user.displayName && !user.displayName.includes('@')
+      ? user.displayName
+      : 'You';
     try {
       await createTask(
         householdId,

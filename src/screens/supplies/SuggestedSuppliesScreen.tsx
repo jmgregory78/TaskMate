@@ -266,7 +266,9 @@ export default function SuggestedSuppliesScreen() {
     if (!user || !householdId) return;
     setSubmitting(true);
     setSubmitError(null);
-    const userLabel = user.displayName ?? user.email ?? user.uid;
+    const userLabel = user.displayName && !user.displayName.includes('@')
+      ? user.displayName
+      : 'You';
     try {
       await createProduct(householdId, userLabel, {
         householdId,

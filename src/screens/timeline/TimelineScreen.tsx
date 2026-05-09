@@ -33,11 +33,13 @@ import {
   getNotificationPrefs,
   scheduleAllTaskReminders,
 } from '../../services/notificationService';
-import { Product, Task, TaskProductUsage } from '../../types/models';
+import { Product, serializeTask, Task, TaskProductUsage } from '../../types/models';
 import { recurrenceShortLabel } from '../../utils/recurrence';
 import UserAvatar from '../../components/UserAvatar';
 import FAB from '../../components/FAB';
 import TaskTypeSheet from '../../components/TaskTypeSheet';
+import CompletionNoteModal from '../../components/CompletionNoteModal';
+import { updateTask } from '../../services/taskService';
 import { Colors } from '../../constants/colors';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -104,11 +106,13 @@ function DateChip({ days, dueDate }: { days: number; dueDate: Date }) {
 function TaskCard({
   item,
   onPress,
+  onNotePress,
   isNeedsAttention,
   isCompletedToday,
 }: {
   item: TimelineTask;
   onPress: () => void;
+  onNotePress?: () => void;
   isNeedsAttention: boolean;
   isCompletedToday?: boolean;
 }) {
@@ -125,6 +129,8 @@ function TaskCard({
       : isNeedsAttention
         ? Colors.primary
         : Colors.border;
+
+  const hasNote = !!(task.lastCompletionNote && task.lastCompletionNote.trim());
 
   const cardContent = (
     <View style={styles.cardContent}>
@@ -157,6 +163,22 @@ function TaskCard({
         <Text style={styles.recurrenceText}>
           {recurrenceShortLabel(task.recurrence)}
         </Text>
+        {/* Note link for completed tasks */}
+        {isCompleted && onNotePress && (
+          <TouchableOpacity
+            style={styles.noteLink}
+            onPress={(e) => {
+              e.stopPropagation();
+              onNotePress();
+            }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            activeOpacity={0.6}
+          >
+            <Text style={styles.noteLinkText}>
+              {hasNote ? '📝 View note' : '+ Add a note'}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -258,6 +280,7 @@ export default function TimelineScreen() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'mine'>('all');
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [noteModalTask, setNoteModalTask] = useState<Task | null>(null);
 
   const openSuggested = () => {
     setSheetOpen(false);
@@ -266,6 +289,27 @@ export default function TimelineScreen() {
   const openCustom = () => {
     setSheetOpen(false);
     navigation.navigate('AddTask');
+  };
+
+  // Note modal handlers
+  const handleNoteSave = async (note: string, remindNextTime: boolean) => {
+    if (!noteModalTask || !householdId) {
+      setNoteModalTask(null);
+      return;
+    }
+    try {
+      await updateTask(householdId, noteModalTask.id, {
+        lastCompletionNote: note.trim() || undefined,
+        nextTimeReminder: remindNextTime ? note.trim() : undefined,
+      });
+    } catch (e) {
+      console.warn('[TimelineScreen] save note failed:', e);
+    }
+    setNoteModalTask(null);
+  };
+
+  const handleNoteSkip = () => {
+    setNoteModalTask(null);
   };
 
   const fabScale = useRef(new Animated.Value(1)).current;
@@ -564,11 +608,12 @@ export default function TimelineScreen() {
         item={item}
         onPress={() => {
           if (isCompletedToday) {
-            navigation.navigate('CompletedTaskDetail', { taskId: item.task.id, task: item.task });
+            navigation.navigate('CompletedTaskDetail', { taskId: item.task.id, task: serializeTask(item.task) });
           } else {
             navigation.navigate('TaskDetail', { taskId: item.task.id });
           }
         }}
+        onNotePress={isCompletedToday ? () => setNoteModalTask(item.task) : undefined}
         isNeedsAttention={section.variant === 'attention'}
         isCompletedToday={isCompletedToday}
       />
@@ -662,6 +707,13 @@ export default function TimelineScreen() {
         onClose={() => setSheetOpen(false)}
         onSuggested={openSuggested}
         onCustom={openCustom}
+      />
+      <CompletionNoteModal
+        visible={noteModalTask !== null}
+        taskName={noteModalTask?.name ?? ''}
+        taskIcon={noteModalTask?.icon}
+        onSave={handleNoteSave}
+        onSkip={handleNoteSkip}
       />
     </View>
   );
@@ -846,6 +898,13 @@ const styles = StyleSheet.create({
   recurrenceText: {
     fontSize: 12,
     color: Colors.textMuted,
+  },
+  noteLink: {
+    marginTop: 4,
+  },
+  noteLinkText: {
+    color: '#6B7280',
+    fontSize: 13,
   },
   // Chip styles
   chip: {

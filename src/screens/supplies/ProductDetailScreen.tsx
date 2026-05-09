@@ -232,7 +232,7 @@ export default function ProductDetailScreen() {
         previousProduct.id,
         newQuantity,
         note,
-        user.displayName ?? user.email ?? user.uid
+        user.displayName && !user.displayName.includes('@') ? user.displayName : 'You'
       );
       const refreshed = await getProduct(householdId, previousProduct.id);
       if (refreshed) setProduct(refreshed);

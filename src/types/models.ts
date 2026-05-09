@@ -98,6 +98,7 @@ export interface Task {
   nextDueDate: Date;
   lastCompletedAt: Date | null;
   lastCompletedBy: string | null;
+  lastCompletedByName: string | null;
   hasInventory: boolean;
   instructions: null;
   icon?: string;
@@ -116,6 +117,9 @@ export interface Task {
   notes?: string;
   nextTimeReminder?: string;
   lastCompletionNote?: string;
+  // End condition tracking
+  completedOccurrences?: number;
+  isEnded?: boolean;
 }
 
 export interface TaskCompletion {
@@ -241,4 +245,99 @@ export interface SupplyHistoryRecord {
   quantity: number;
   eventType: SupplyHistoryEventType;
   note?: string;
+}
+
+/**
+ * Serialized version of RecurrenceRule for navigation params.
+ * Date fields are converted to ISO strings.
+ */
+export interface SerializedRecurrenceRule {
+  frequency: RecurrenceFrequency;
+  interval: number;
+  daysOfWeek?: number[];
+  monthlyType?: 'dayOfMonth' | 'dayOfWeek';
+  monthlyDay?: number;
+  monthlyWeekday?: MonthlyWeekday;
+  endType?: RecurrenceEndType;
+  endAfterOccurrences?: number;
+  endByDate?: string;
+}
+
+/**
+ * Serialized version of Task for navigation params.
+ * All Date fields are converted to ISO strings to avoid
+ * React Navigation's "Non-serializable values" warning.
+ */
+export interface SerializedTask {
+  id: string;
+  householdId: string;
+  name: string;
+  category: TaskCategory;
+  location?: string;
+  description?: string;
+  firstDueDate: string;
+  recurrence: SerializedRecurrenceRule;
+  nextDueDate: string;
+  lastCompletedAt: string | null;
+  lastCompletedBy: string | null;
+  lastCompletedByName: string | null;
+  hasInventory: boolean;
+  instructions: null;
+  icon?: string;
+  completedToday: boolean;
+  completedAt: string | null;
+  createdAt: string;
+  createdBy: string;
+  assignedTo: string | null;
+  assignedToName: string | null;
+  assignedAt: string | null;
+  assignedBy: string | null;
+  reminderDaysBefore: number | null;
+  snoozedUntil: string | null;
+  pendingNotificationId: string | null;
+  notes?: string;
+  nextTimeReminder?: string;
+  lastCompletionNote?: string;
+  completedOccurrences?: number;
+  isEnded?: boolean;
+}
+
+/**
+ * Serialize a Task for navigation params.
+ */
+export function serializeTask(task: Task): SerializedTask {
+  return {
+    ...task,
+    firstDueDate: task.firstDueDate.toISOString(),
+    nextDueDate: task.nextDueDate.toISOString(),
+    lastCompletedAt: task.lastCompletedAt?.toISOString() ?? null,
+    completedAt: task.completedAt?.toISOString() ?? null,
+    createdAt: task.createdAt.toISOString(),
+    assignedAt: task.assignedAt?.toISOString() ?? null,
+    snoozedUntil: task.snoozedUntil?.toISOString() ?? null,
+    recurrence: {
+      ...task.recurrence,
+      endByDate: task.recurrence.endByDate?.toISOString(),
+    },
+  };
+}
+
+/**
+ * Deserialize a Task from navigation params.
+ */
+export function deserializeTask(serialized: SerializedTask): Task {
+  return {
+    ...serialized,
+    firstDueDate: new Date(serialized.firstDueDate),
+    nextDueDate: new Date(serialized.nextDueDate),
+    lastCompletedAt: serialized.lastCompletedAt ? new Date(serialized.lastCompletedAt) : null,
+    completedAt: serialized.completedAt ? new Date(serialized.completedAt) : null,
+    createdAt: new Date(serialized.createdAt),
+    assignedAt: serialized.assignedAt ? new Date(serialized.assignedAt) : null,
+    snoozedUntil: serialized.snoozedUntil ? new Date(serialized.snoozedUntil) : null,
+    recurrence: {
+      ...serialized.recurrence,
+      endByDate: serialized.recurrence.endByDate ? new Date(serialized.recurrence.endByDate) : undefined,
+    },
+  };
 }

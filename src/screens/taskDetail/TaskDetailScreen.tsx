@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -171,8 +171,16 @@ export default function TaskDetailScreen() {
   );
   const [completions, setCompletions] = useState<TaskCompletion[]>([]);
   const [showAllHistory, setShowAllHistory] = useState(false);
-  const [completionNoteModalVisible, setCompletionNoteModalVisible] =
-    useState(false);
+
+  // Completion note modal state
+  const [noteModalVisible, setNoteModalVisible] = useState(false);
+  const [completedTaskInfo, setCompletedTaskInfo] = useState<{
+    name: string;
+    icon: string;
+  } | null>(null);
+
+  // Guard to prevent multiple simultaneous completion calls
+  const isCompletingRef = useRef(false);
 
   const currentAssignee = useMemo<Assignee | null>(() => {
     if (!task?.assignedTo) return null;
@@ -242,7 +250,7 @@ export default function TaskDetailScreen() {
   };
 
   const handleOpenComplete = () => {
-    if (!task || actionPending || task.completedToday) return;
+    if (!task || actionPending || task.completedToday || isCompletingRef.current) return;
     setSheetVisible(true);
   };
 
@@ -269,30 +277,37 @@ export default function TaskDetailScreen() {
     return refreshed;
   };
 
-  // State to hold the completed task info for the note modal
-  const [completedTaskForNote, setCompletedTaskForNote] = useState<{
-    name: string;
-    icon: string;
-  } | null>(null);
-
   const runCompleteTask = async (deductInventory: boolean) => {
-    if (!task || !user || !householdId || actionPending) return;
+    // Prevent multiple simultaneous completion calls
+    if (isCompletingRef.current) {
+      console.log('[TaskDetail] Already completing, ignoring');
+      return;
+    }
+    if (!task || !user || !householdId) {
+      console.log('[TaskDetail] Missing required data');
+      return;
+    }
+
+    isCompletingRef.current = true;
     setActionPending(true);
+
     try {
       // Build activity note if deducting inventory
       const activityNote =
         deductInventory && productUsages.length > 0
           ? `Used ${productUsages
-              .map(
-                (u) =>
-                  `${u.usageAmount} ${u.usageUnit} ${u.productName}`.trim()
-              )
+              .map((u) => `${u.usageAmount} ${u.usageUnit} ${u.productName}`.trim())
               .join(', ')}`
           : undefined;
 
-      const displayName = user.displayName ?? user.email ?? user.uid;
+      const displayName = user.displayName && !user.displayName.includes('@')
+        ? user.displayName
+        : 'You';
 
-      // Complete the task FIRST - no note yet
+      // Complete the task - this handles everything:
+      // - Firestore update
+      // - Next due date calculation
+      // - Inventory deduction (if not skipped)
       await completeTask(
         householdId,
         taskId,
@@ -306,57 +321,33 @@ export default function TaskDetailScreen() {
         }
       );
 
-      // Clear any active snooze and cancel its scheduled notification(s).
-      if (task.snoozedUntil) {
-        try {
+      // Clear snooze (non-critical)
+      try {
+        if (task.snoozedUntil) {
           await updateTask(householdId, taskId, { snoozedUntil: null });
-        } catch (e) {
-          console.warn('[TaskDetail] clear snoozedUntil failed:', e);
         }
+        await cancelTaskNotifications(taskId);
+      } catch (e) {
+        console.warn('[TaskDetail] snooze/notification cleanup failed:', e);
       }
-      await cancelTaskNotifications(taskId);
 
-      // Task completed successfully - now show overlay and note modal
+      // Hide sheet
       setSheetVisible(false);
-      setOverlayTaskName(task.name);
-      setOverlayTaskIcon(task.icon ?? '📋');
-      setCompletedTaskForNote({ name: task.name, icon: task.icon ?? '📋' });
-      setOverlayVisible(true);
-
-      // Show the note modal after a short delay to let overlay appear
-      console.log('[TaskDetailScreen] Showing completion note modal for task:', taskId);
-      setTimeout(() => {
-        console.log('[TaskDetailScreen] Setting completionNoteModalVisible to true');
-        setCompletionNoteModalVisible(true);
-      }, 300);
-
-      void refreshTask();
-    } catch (e) {
-      const err = e as { message?: string };
-      Alert.alert('Error', err.message ?? 'Failed to complete task');
-    } finally {
       setActionPending(false);
-    }
-  };
 
-  const saveCompletionNote = async (note: string, remindNextTime: boolean) => {
-    if (!householdId || !completedTaskForNote) return;
-    try {
-      // Update the task with the note
-      await updateTask(householdId, taskId, {
-        lastCompletionNote: note || undefined,
-        nextTimeReminder: remindNextTime ? note : undefined,
-      });
-      void refreshTask();
-    } catch (e) {
-      console.warn('[TaskDetail] save completion note failed:', e);
+      // Navigate back to timeline - user can add note from the completed task card
+      (navigation as any).navigate('Main', { screen: 'Tasks' });
+
+    } catch (e: any) {
+      console.error('[TaskDetail] COMPLETION FAILED:', e?.message, e);
+      isCompletingRef.current = false;
+      setActionPending(false);
+      Alert.alert('Error', 'Could not complete task. Please try again.');
     }
   };
 
   const handleOverlayDismiss = () => {
     setOverlayVisible(false);
-    setCompletedTaskForNote(null);
-    (navigation as any).navigate('Main', { screen: 'Tasks' });
   };
 
   const handleConfirmComplete = () => {
@@ -373,18 +364,6 @@ export default function TaskDetailScreen() {
     setSheetVisible(false);
   };
 
-  const handleCompletionNoteSave = (note: string, remindNextTime: boolean) => {
-    setCompletionNoteModalVisible(false);
-    // Save the note to the already-completed task
-    void saveCompletionNote(note, remindNextTime);
-  };
-
-  const handleCompletionNoteSkip = () => {
-    setCompletionNoteModalVisible(false);
-    // No note to save, just dismiss
-    setCompletedTaskForNote(null);
-  };
-
   const handleDismissReminder = async () => {
     if (!householdId) return;
     try {
@@ -395,6 +374,32 @@ export default function TaskDetailScreen() {
     } catch (e) {
       console.warn('[TaskDetail] dismiss reminder failed:', e);
     }
+  };
+
+  const handleNoteSave = async (note: string, remindNextTime: boolean) => {
+    setNoteModalVisible(false);
+    setCompletedTaskInfo(null);
+
+    // Save the note to the task
+    if (householdId && note.trim()) {
+      try {
+        await updateTask(householdId, taskId, {
+          lastCompletionNote: note.trim(),
+          nextTimeReminder: remindNextTime ? note.trim() : undefined,
+        });
+      } catch (e) {
+        console.warn('[TaskDetail] save note failed:', e);
+      }
+    }
+
+    // Navigate back
+    (navigation as any).navigate('Main', { screen: 'Tasks' });
+  };
+
+  const handleNoteSkip = () => {
+    setNoteModalVisible(false);
+    setCompletedTaskInfo(null);
+    (navigation as any).navigate('Main', { screen: 'Tasks' });
   };
 
   const handleSnooze = async (amount: number, unit: SnoozeUnit) => {
@@ -488,14 +493,14 @@ export default function TaskDetailScreen() {
         next?.userId ?? null,
         next?.name ?? null,
         user.uid,
-        user.displayName ?? user.email ?? user.uid
+        user.displayName && !user.displayName.includes('@') ? user.displayName : 'You'
       );
       if (next && next.userId !== user.uid) {
         void sendAssignmentNotification(
           next.userId,
           task.name,
           task.icon ?? '📋',
-          getFirstName(user.displayName ?? user.email ?? user.uid),
+          getFirstName(user.displayName && !user.displayName.includes('@') ? user.displayName : 'You'),
           householdId,
           taskId
         );
@@ -574,7 +579,7 @@ export default function TaskDetailScreen() {
               </Text>
               <View style={styles.reminderBannerActions}>
                 <TouchableOpacity
-                  style={styles.reminderCompleteButton}
+                  style={[styles.reminderCompleteButton, actionPending && styles.disabled]}
                   onPress={handleOpenComplete}
                   disabled={actionPending}
                   activeOpacity={0.85}
@@ -618,7 +623,7 @@ export default function TaskDetailScreen() {
             </Text>
             <View style={styles.reminderBannerActions}>
               <TouchableOpacity
-                style={styles.reminderCompleteButton}
+                style={[styles.reminderCompleteButton, actionPending && styles.disabled]}
                 onPress={handleOpenComplete}
                 disabled={actionPending}
                 activeOpacity={0.85}
@@ -702,6 +707,19 @@ export default function TaskDetailScreen() {
         <Text style={styles.reminderText}>
           🔔 Reminder: {reminderLabel(task.reminderDaysBefore)}
         </Text>
+        {task.isEnded ? (
+          <Text style={styles.endedText}>
+            ✅ Task series completed
+          </Text>
+        ) : task.recurrence?.endType === 'afterOccurrences' && task.recurrence?.endAfterOccurrences ? (
+          <Text style={styles.endInfoText}>
+            🔄 Ends after {task.recurrence.endAfterOccurrences} times · {Math.max(0, task.recurrence.endAfterOccurrences - (task.completedOccurrences ?? 0))} remaining
+          </Text>
+        ) : task.recurrence?.endType === 'byDate' && task.recurrence?.endByDate ? (
+          <Text style={styles.endInfoText}>
+            📅 Ends on {format(task.recurrence.endByDate, 'MMMM d, yyyy')}
+          </Text>
+        ) : null}
       </View>
 
       <View style={styles.assignmentRow}>
@@ -1018,11 +1036,11 @@ export default function TaskDetailScreen() {
         onClose={handleLinkSheetClose}
       />
       <CompletionNoteModal
-        visible={completionNoteModalVisible}
-        taskName={completedTaskForNote?.name ?? task.name}
-        taskIcon={completedTaskForNote?.icon ?? task.icon}
-        onSave={handleCompletionNoteSave}
-        onSkip={handleCompletionNoteSkip}
+        visible={noteModalVisible}
+        taskName={completedTaskInfo?.name ?? task.name}
+        taskIcon={completedTaskInfo?.icon ?? task.icon}
+        onSave={handleNoteSave}
+        onSkip={handleNoteSkip}
       />
     </>
   );
@@ -1182,6 +1200,17 @@ const styles = StyleSheet.create({
   reminderText: {
     fontSize: 13,
     color: Colors.textMuted,
+    marginTop: 6,
+  },
+  endInfoText: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    marginTop: 6,
+  },
+  endedText: {
+    fontSize: 13,
+    color: Colors.successText,
+    fontWeight: '600',
     marginTop: 6,
   },
   placeholderText: {
