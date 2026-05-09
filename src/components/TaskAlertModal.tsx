@@ -8,6 +8,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -17,7 +18,6 @@ import { Task } from '../types/models';
 import { Colors } from '../constants/colors';
 import { recurrenceSummary } from '../utils/recurrence';
 import SnoozeSheet, { SnoozeUnit } from './SnoozeSheet';
-import CompletionNoteModal from './CompletionNoteModal';
 
 interface Props {
   tasks: Task[];
@@ -78,7 +78,10 @@ export default function TaskAlertModal({
   const scrollRef = useRef<ScrollView>(null);
   const [index, setIndex] = useState(0);
   const [snoozeOpen, setSnoozeOpen] = useState(false);
-  const [completionNoteOpen, setCompletionNoteOpen] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [noteExpanded, setNoteExpanded] = useState(false);
+  const [noteText, setNoteText] = useState('');
+  const [remindNextTime, setRemindNextTime] = useState(false);
 
   // Guard to prevent multiple completion calls from rapid taps
   const isCompletingRef = useRef(false);
@@ -95,7 +98,10 @@ export default function TaskAlertModal({
       slideAnim.setValue(-300);
       setIndex(0);
       setSnoozeOpen(false);
-      setCompletionNoteOpen(false);
+      setShowConfirmModal(false);
+      setNoteExpanded(false);
+      setNoteText('');
+      setRemindNextTime(false);
       // Reset the guard when modal is dismissed
       isCompletingRef.current = false;
     }
@@ -268,8 +274,10 @@ export default function TaskAlertModal({
               style={[styles.completeButton, isCompletingRef.current && styles.disabled]}
               onPress={() => {
                 if (isCompletingRef.current) return;
-                console.log('[TaskAlertModal] Opening completion note modal for task:', current.id);
-                setCompletionNoteOpen(true);
+                setNoteExpanded(false);
+                setNoteText('');
+                setRemindNextTime(false);
+                setShowConfirmModal(true);
               }}
               disabled={isCompletingRef.current}
               activeOpacity={0.85}
@@ -305,23 +313,87 @@ export default function TaskAlertModal({
         onCancel={() => setSnoozeOpen(false)}
       />
 
-      <CompletionNoteModal
-        visible={completionNoteOpen}
-        taskName={current.name}
-        taskIcon={current.icon}
-        onSave={(note, remindNextTime) => {
-          if (isCompletingRef.current) return;
-          isCompletingRef.current = true;
-          setCompletionNoteOpen(false);
-          onComplete(current, note, remindNextTime);
+      {/* Completion Confirmation Modal */}
+      <Modal
+        visible={showConfirmModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setShowConfirmModal(false);
+          setNoteExpanded(false);
+          setNoteText('');
+          setRemindNextTime(false);
         }}
-        onSkip={() => {
-          if (isCompletingRef.current) return;
-          isCompletingRef.current = true;
-          setCompletionNoteOpen(false);
-          onComplete(current, '', false);
-        }}
-      />
+      >
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmCard}>
+            <Text style={styles.confirmTitle}>Mark as Complete?</Text>
+            <Text style={styles.confirmSubtitle}>{current.name}</Text>
+
+            {!noteExpanded ? (
+              <TouchableOpacity
+                onPress={() => setNoteExpanded(true)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.addNoteLink}>+ Add a note</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.noteContainer}>
+                <TextInput
+                  style={styles.noteInput}
+                  value={noteText}
+                  onChangeText={setNoteText}
+                  placeholder="What did you do? Any notes for next time?"
+                  placeholderTextColor="#9CA3AF"
+                  multiline
+                  autoFocus
+                />
+                <TouchableOpacity
+                  onPress={() => setRemindNextTime(!remindNextTime)}
+                  style={styles.remindRow}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.checkbox, remindNextTime && styles.checkboxChecked]}>
+                    {remindNextTime ? <Text style={styles.checkboxMark}>✓</Text> : null}
+                  </View>
+                  <Text style={styles.remindText}>
+                    Remind me of this next time
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <View style={styles.confirmButtonRow}>
+              <TouchableOpacity
+                style={styles.confirmCancelBtn}
+                onPress={() => {
+                  setShowConfirmModal(false);
+                  setNoteExpanded(false);
+                  setNoteText('');
+                  setRemindNextTime(false);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.confirmCancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.confirmBtn, isCompletingRef.current && styles.disabled]}
+                onPress={() => {
+                  if (isCompletingRef.current) return;
+                  isCompletingRef.current = true;
+                  setShowConfirmModal(false);
+                  onComplete(current, noteText.trim(), remindNextTime);
+                }}
+                disabled={isCompletingRef.current}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.confirmBtnText}>Confirm & Complete</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </Modal>
   );
 }
@@ -521,5 +593,106 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#78350F',
     lineHeight: 18,
+  },
+  // Confirmation Modal styles
+  confirmOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  confirmCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    gap: 16,
+  },
+  confirmTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+    textAlign: 'center',
+  },
+  confirmSubtitle: {
+    fontSize: 15,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  addNoteLink: {
+    color: '#0D9488',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  noteContainer: {
+    gap: 8,
+  },
+  noteInput: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    padding: 12,
+    minHeight: 80,
+    fontSize: 14,
+    color: '#111827',
+    textAlignVertical: 'top',
+  },
+  remindRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: '#0D9488',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxChecked: {
+    backgroundColor: '#0D9488',
+  },
+  checkboxMark: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  remindText: {
+    fontSize: 13,
+    color: '#6B7280',
+  },
+  confirmButtonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  confirmCancelBtn: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    alignItems: 'center',
+  },
+  confirmCancelBtnText: {
+    color: '#6B7280',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  confirmBtn: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 10,
+    backgroundColor: '#0D9488',
+    alignItems: 'center',
+  },
+  confirmBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

@@ -7,6 +7,8 @@ import {
   ActivityIndicator,
   ScrollView,
   Alert,
+  Modal,
+  TextInput,
 } from 'react-native';
 import {
   useFocusEffect,
@@ -56,7 +58,6 @@ import {
 import { reminderLabel } from '../../components/ReminderPicker';
 import SnoozeSheet, { SnoozeUnit } from '../../components/SnoozeSheet';
 import PurchaseLinkSheet from '../../components/PurchaseLinkSheet';
-import CompletionNoteModal from '../../components/CompletionNoteModal';
 import { openPurchaseUrl } from '../../utils/purchaseLink';
 import * as Notifications from 'expo-notifications';
 import { getNotificationPrefs, scheduleAllTaskReminders } from '../../services/notificationService';
@@ -172,12 +173,11 @@ export default function TaskDetailScreen() {
   const [completions, setCompletions] = useState<TaskCompletion[]>([]);
   const [showAllHistory, setShowAllHistory] = useState(false);
 
-  // Completion note modal state
-  const [noteModalVisible, setNoteModalVisible] = useState(false);
-  const [completedTaskInfo, setCompletedTaskInfo] = useState<{
-    name: string;
-    icon: string;
-  } | null>(null);
+  // Completion confirmation modal state
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [noteExpanded, setNoteExpanded] = useState(false);
+  const [noteText, setNoteText] = useState('');
+  const [remindNextTime, setRemindNextTime] = useState(false);
 
   // Guard to prevent multiple simultaneous completion calls
   const isCompletingRef = useRef(false);
@@ -251,7 +251,11 @@ export default function TaskDetailScreen() {
 
   const handleOpenComplete = () => {
     if (!task || actionPending || task.completedToday || isCompletingRef.current) return;
-    setSheetVisible(true);
+    // Reset modal state and show confirmation
+    setNoteExpanded(false);
+    setNoteText('');
+    setRemindNextTime(false);
+    setShowConfirmModal(true);
   };
 
   const refreshTask = async () => {
@@ -277,7 +281,7 @@ export default function TaskDetailScreen() {
     return refreshed;
   };
 
-  const runCompleteTask = async (deductInventory: boolean) => {
+  const runCompleteTask = async (deductInventory: boolean, completionNote?: string, shouldRemindNextTime?: boolean) => {
     // Prevent multiple simultaneous completion calls
     if (isCompletingRef.current) {
       console.log('[TaskDetail] Already completing, ignoring');
@@ -314,8 +318,8 @@ export default function TaskDetailScreen() {
         user.uid,
         activityNote,
         {
-          completionNote: '',
-          remindNextTime: false,
+          completionNote: completionNote?.trim() ?? '',
+          remindNextTime: shouldRemindNextTime ?? false,
           displayName,
           skipInventoryDeduction: !deductInventory,
         }
@@ -331,11 +335,12 @@ export default function TaskDetailScreen() {
         console.warn('[TaskDetail] snooze/notification cleanup failed:', e);
       }
 
-      // Hide sheet
+      // Hide modals/sheets
       setSheetVisible(false);
+      setShowConfirmModal(false);
       setActionPending(false);
 
-      // Navigate back to timeline - user can add note from the completed task card
+      // Navigate back to timeline
       (navigation as any).navigate('Main', { screen: 'Tasks' });
 
     } catch (e: any) {
@@ -351,13 +356,20 @@ export default function TaskDetailScreen() {
   };
 
   const handleConfirmComplete = () => {
-    // Complete the task immediately (with inventory deduction)
-    void runCompleteTask(true);
+    // Complete the task immediately (with inventory deduction) and note
+    void runCompleteTask(true, noteText, remindNextTime);
   };
 
   const handleConfirmWithoutLogging = () => {
-    // Complete the task immediately (without inventory deduction)
-    void runCompleteTask(false);
+    // Complete the task immediately (without inventory deduction) but with note
+    void runCompleteTask(false, noteText, remindNextTime);
+  };
+
+  const handleCancelConfirmModal = () => {
+    setShowConfirmModal(false);
+    setNoteExpanded(false);
+    setNoteText('');
+    setRemindNextTime(false);
   };
 
   const handleCancelComplete = () => {
@@ -376,31 +388,6 @@ export default function TaskDetailScreen() {
     }
   };
 
-  const handleNoteSave = async (note: string, remindNextTime: boolean) => {
-    setNoteModalVisible(false);
-    setCompletedTaskInfo(null);
-
-    // Save the note to the task
-    if (householdId && note.trim()) {
-      try {
-        await updateTask(householdId, taskId, {
-          lastCompletionNote: note.trim(),
-          nextTimeReminder: remindNextTime ? note.trim() : undefined,
-        });
-      } catch (e) {
-        console.warn('[TaskDetail] save note failed:', e);
-      }
-    }
-
-    // Navigate back
-    (navigation as any).navigate('Main', { screen: 'Tasks' });
-  };
-
-  const handleNoteSkip = () => {
-    setNoteModalVisible(false);
-    setCompletedTaskInfo(null);
-    (navigation as any).navigate('Main', { screen: 'Tasks' });
-  };
 
   const handleSnooze = async (amount: number, unit: SnoozeUnit) => {
     if (!task || !householdId || !user?.uid) return;
@@ -980,6 +967,76 @@ export default function TaskDetailScreen() {
       </View>
 
       </ScrollView>
+
+      {/* Completion Confirmation Modal */}
+      <Modal
+        visible={showConfirmModal}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCancelConfirmModal}
+      >
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmCard}>
+            <Text style={styles.confirmTitle}>Mark as Complete?</Text>
+            <Text style={styles.confirmSubtitle}>{task.name}</Text>
+
+            {!noteExpanded ? (
+              <TouchableOpacity
+                onPress={() => setNoteExpanded(true)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.addNoteLink}>+ Add a note</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.noteContainer}>
+                <TextInput
+                  style={styles.noteInput}
+                  value={noteText}
+                  onChangeText={setNoteText}
+                  placeholder="What did you do? Any notes for next time?"
+                  placeholderTextColor="#9CA3AF"
+                  multiline
+                  autoFocus
+                />
+                <TouchableOpacity
+                  onPress={() => setRemindNextTime(!remindNextTime)}
+                  style={styles.remindRow}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.checkbox, remindNextTime && styles.checkboxChecked]}>
+                    {remindNextTime ? <Text style={styles.checkboxMark}>✓</Text> : null}
+                  </View>
+                  <Text style={styles.remindText}>
+                    Remind me of this next time
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <View style={styles.confirmButtonRow}>
+              <TouchableOpacity
+                style={styles.confirmCancelBtn}
+                onPress={handleCancelConfirmModal}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.confirmCancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.confirmBtn, isCompletingRef.current && styles.disabled]}
+                onPress={handleConfirmComplete}
+                disabled={isCompletingRef.current}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.confirmBtnText}>
+                  {actionPending ? 'Completing...' : 'Confirm & Complete'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <CompleteTaskSheet
         visible={sheetVisible}
         task={task}
@@ -1034,13 +1091,6 @@ export default function TaskDetailScreen() {
         product={linkSheetProduct}
         householdId={householdId}
         onClose={handleLinkSheetClose}
-      />
-      <CompletionNoteModal
-        visible={noteModalVisible}
-        taskName={completedTaskInfo?.name ?? task.name}
-        taskIcon={completedTaskInfo?.icon ?? task.icon}
-        onSave={handleNoteSave}
-        onSkip={handleNoteSkip}
       />
     </>
   );
@@ -1575,6 +1625,107 @@ const styles = StyleSheet.create({
   viewAllHistoryText: {
     color: Colors.primary,
     fontSize: 14,
+    fontWeight: '600',
+  },
+  // Confirmation Modal styles
+  confirmOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  confirmCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    gap: 16,
+  },
+  confirmTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+    textAlign: 'center',
+  },
+  confirmSubtitle: {
+    fontSize: 15,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  addNoteLink: {
+    color: '#0D9488',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  noteContainer: {
+    gap: 8,
+  },
+  noteInput: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    padding: 12,
+    minHeight: 80,
+    fontSize: 14,
+    color: '#111827',
+    textAlignVertical: 'top',
+  },
+  remindRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: '#0D9488',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxChecked: {
+    backgroundColor: '#0D9488',
+  },
+  checkboxMark: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  remindText: {
+    fontSize: 13,
+    color: '#6B7280',
+  },
+  confirmButtonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  confirmCancelBtn: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    alignItems: 'center',
+  },
+  confirmCancelBtnText: {
+    color: '#6B7280',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  confirmBtn: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 10,
+    backgroundColor: '#0D9488',
+    alignItems: 'center',
+  },
+  confirmBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
     fontWeight: '600',
   },
 });
