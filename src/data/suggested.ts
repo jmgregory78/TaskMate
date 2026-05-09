@@ -10,6 +10,7 @@ export type WizardCategoryId =
   | 'inspections'
   | 'finance'
   | 'travel'
+  | 'documents'
   | 'pool'
   | 'hot-tub'
   | 'emergency';
@@ -30,6 +31,7 @@ export const WIZARD_CATEGORIES: WizardCategory[] = [
   { id: 'inspections', emoji: '🔍', name: 'Inspections & Services' },
   { id: 'finance', emoji: '💰', name: 'Finance & Admin' },
   { id: 'travel', emoji: '✈️', name: 'Travel & Rewards' },
+  { id: 'documents', emoji: '📋', name: 'Documents & Renewals' },
   { id: 'pool', emoji: '🏊', name: 'Pool' },
   { id: 'hot-tub', emoji: '♨️', name: 'Hot Tub' },
   { id: 'emergency', emoji: '⚡', name: 'Emergency & Seasonal' },
@@ -191,6 +193,22 @@ export const SUGGESTED_TASKS: SuggestedTaskCategory[] = [
       { id: 'tsa-precheck', name: 'TSA PreCheck Renewal', category: 'Other', frequency: 'yearly', interval: 5, reminderDaysBefore: 60, icon: '🛂' },
       { id: 'global-entry', name: 'Global Entry Renewal', category: 'Other', frequency: 'yearly', interval: 5, reminderDaysBefore: 60, icon: '🛂' },
       { id: 'travel-insurance', name: 'Travel Insurance Review', category: 'Other', frequency: 'yearly', interval: 1, reminderDaysBefore: 30, icon: '🛡️' },
+    ],
+  },
+  {
+    id: 'documents',
+    emoji: '📋',
+    name: 'Documents & Renewals',
+    tasks: [
+      { id: 'drivers-license-renewal', name: "Driver's License Renewal", category: 'Other', frequency: 'yearly', interval: 4, reminderDaysBefore: 60, icon: '🪪' },
+      { id: 'vehicle-registration', name: 'Vehicle Registration Renewal', category: 'Vehicles', frequency: 'yearly', interval: 1, reminderDaysBefore: 30, icon: '🚗' },
+      { id: 'green-card-renewal', name: 'Green Card Renewal', category: 'Other', frequency: 'yearly', interval: 10, reminderDaysBefore: 180, icon: '🪪' },
+      { id: 'homeowners-insurance', name: "Homeowner's Insurance Review", category: 'Other', frequency: 'yearly', interval: 1, reminderDaysBefore: 30, icon: '🏠' },
+      { id: 'auto-insurance', name: 'Auto Insurance Review', category: 'Vehicles', frequency: 'yearly', interval: 1, reminderDaysBefore: 30, icon: '🚗' },
+      { id: 'health-insurance-enrollment', name: 'Health Insurance Open Enrollment', category: 'Other', frequency: 'yearly', interval: 1, reminderDaysBefore: 30, icon: '🏥' },
+      { id: 'pet-license', name: 'Pet License Renewal', category: 'Other', frequency: 'yearly', interval: 1, reminderDaysBefore: 30, icon: '🐾' },
+      { id: 'nexus-card', name: 'NEXUS Card Renewal', category: 'Other', frequency: 'yearly', interval: 5, reminderDaysBefore: 60, icon: '🛂' },
+      { id: 'work-visa', name: 'Work Visa Renewal', category: 'Other', frequency: 'yearly', interval: 1, reminderDaysBefore: 90, icon: '📄' },
     ],
   },
   {

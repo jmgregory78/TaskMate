@@ -71,8 +71,9 @@ export default function SupplyHistoryChart({ product, history }: Props) {
   const filteredHistory = history.filter((h) => h.date >= window.fromDate);
   const chartData = filteredHistory.length >= 2 ? filteredHistory : history;
 
-  // Calculate maxQuantity from history
-  const maxQuantity = Math.max(...chartData.map((h) => h.quantity), product.currentQuantity);
+  // Calculate maxQuantity from history (ensure whole number)
+  const rawMax = Math.max(...chartData.map((h) => h.quantity), product.currentQuantity);
+  const maxQuantity = Math.ceil(rawMax);
 
   // Calculate threshold
   const thresholdQty =
@@ -80,7 +81,19 @@ export default function SupplyHistoryChart({ product, history }: Props) {
       ? product.lowThresholdQty
       : (product.lowThresholdPercent / 100) * maxQuantity;
 
-  const maxY = Math.max(maxQuantity, ...chartData.map((h) => h.quantity));
+  // Ensure maxY is a whole number for clean Y-axis labels
+  const maxY = Math.max(maxQuantity, Math.ceil(Math.max(...chartData.map((h) => h.quantity))));
+
+  // Cap sections at reasonable number (max 6) to avoid cluttered Y-axis
+  const numSections = Math.min(maxY, 6);
+  const stepValue = maxY > 6 ? Math.ceil(maxY / 6) : 1;
+  const adjustedMaxY = numSections * stepValue;
+
+  // Generate Y-axis labels as whole numbers
+  const yLabels = Array.from(
+    { length: numSections + 1 },
+    (_, i) => (i * stepValue).toString()
+  );
 
   // Determine how many x-axis labels to show (max 4-5 labels)
   const labelInterval = Math.max(1, Math.floor(chartData.length / 4));
@@ -147,8 +160,10 @@ export default function SupplyHistoryChart({ product, history }: Props) {
           initialSpacing={10}
           endSpacing={10}
           spacing={chartSpacing}
-          noOfSections={4}
-          maxValue={maxY * 1.1}
+          noOfSections={numSections}
+          stepValue={stepValue}
+          maxValue={adjustedMaxY}
+          yAxisLabelTexts={yLabels}
           yAxisOffset={0}
           hideRules={false}
           showVerticalLines={false}
@@ -194,6 +209,8 @@ const styles = StyleSheet.create({
   },
   chartWrapper: {
     marginLeft: -16, // Offset card padding for full-width chart
+    overflow: 'hidden',
+    width: '100%',
   },
   axisLabel: {
     color: Colors.textMuted,

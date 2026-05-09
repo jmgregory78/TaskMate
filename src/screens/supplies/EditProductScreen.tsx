@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import * as ExpoStatusBar from 'expo-status-bar';
 import {
   ActivityIndicator,
   Alert,
@@ -11,6 +12,7 @@ import {
 } from 'react-native';
 import {
   RouteProp,
+  useFocusEffect,
   useNavigation,
   useRoute,
 } from '@react-navigation/native';
@@ -61,6 +63,16 @@ export default function EditProductScreen() {
   );
 
   const trimmedName = name.trim();
+
+  // Set dark status bar for light background screen
+  useFocusEffect(
+    useCallback(() => {
+      ExpoStatusBar.setStatusBarStyle('dark');
+      return () => {
+        ExpoStatusBar.setStatusBarStyle('light');
+      };
+    }, [])
+  );
 
   const changedFields = useMemo<Partial<Product> | null>(() => {
     if (trimmedName.length === 0) return null;

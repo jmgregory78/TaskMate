@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import * as ExpoStatusBar from 'expo-status-bar';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -141,6 +142,16 @@ export default function SuggestedTasksScreen() {
   const [supplyPromptVisible, setSupplyPromptVisible] = useState(false);
   const [pendingSupplies, setPendingSupplies] = useState<SuggestedSupply[]>([]);
   const [addedTaskIds, setAddedTaskIds] = useState<string[]>([]);
+
+  // Set dark status bar for light background screen
+  useFocusEffect(
+    useCallback(() => {
+      ExpoStatusBar.setStatusBarStyle('dark');
+      return () => {
+        ExpoStatusBar.setStatusBarStyle('light');
+      };
+    }, [])
+  );
 
   // Load existing tasks
   useFocusEffect(

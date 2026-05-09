@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import * as ExpoStatusBar from 'expo-status-bar';
 import {
   ActivityIndicator,
   Alert,
@@ -142,6 +143,16 @@ export default function ProductDetailScreen() {
   const [successBanner, setSuccessBanner] = useState<string | null>(null);
   const [showPurchaseHistory, setShowPurchaseHistory] = useState(false);
   const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
+
+  // Set dark status bar for light background screen
+  useFocusEffect(
+    useCallback(() => {
+      ExpoStatusBar.setStatusBarStyle('dark');
+      return () => {
+        ExpoStatusBar.setStatusBarStyle('light');
+      };
+    }, [])
+  );
 
   useFocusEffect(
     useCallback(() => {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import * as ExpoStatusBar from 'expo-status-bar';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -125,6 +126,16 @@ export default function SuggestedSuppliesScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [addedSupplyCount, setAddedSupplyCount] = useState(0);
+
+  // Set dark status bar for light background screen
+  useFocusEffect(
+    useCallback(() => {
+      ExpoStatusBar.setStatusBarStyle('dark');
+      return () => {
+        ExpoStatusBar.setStatusBarStyle('light');
+      };
+    }, [])
+  );
 
   // Load existing supplies
   useFocusEffect(

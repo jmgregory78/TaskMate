@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import * as ExpoStatusBar from 'expo-status-bar';
 import {
   ActivityIndicator,
   Alert,
@@ -15,6 +16,7 @@ import {
 } from 'react-native';
 import {
   RouteProp,
+  useFocusEffect,
   useNavigation,
   useRoute,
 } from '@react-navigation/native';
@@ -140,6 +142,16 @@ export default function EditTaskScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Set dark status bar for light background screen
+  useFocusEffect(
+    useCallback(() => {
+      ExpoStatusBar.setStatusBarStyle('dark');
+      return () => {
+        ExpoStatusBar.setStatusBarStyle('light');
+      };
+    }, [])
+  );
 
   useEffect(() => {
     let cancelled = false;

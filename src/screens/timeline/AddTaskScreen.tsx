@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import * as ExpoStatusBar from 'expo-status-bar';
 import {
   View,
   Text,
@@ -7,7 +8,7 @@ import {
   StyleSheet,
   Platform,
 } from 'react-native';
-import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
+import { RouteProp, useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { format } from 'date-fns';
 import DateTimePicker, {
   DateTimePickerEvent,
@@ -129,6 +130,16 @@ export default function AddTaskScreen() {
   );
 
   const [notes, setNotes] = useState('');
+
+  // Set dark status bar for light background screen
+  useFocusEffect(
+    useCallback(() => {
+      ExpoStatusBar.setStatusBarStyle('dark');
+      return () => {
+        ExpoStatusBar.setStatusBarStyle('light');
+      };
+    }, [])
+  );
 
   useEffect(() => {
     if (!user) return;

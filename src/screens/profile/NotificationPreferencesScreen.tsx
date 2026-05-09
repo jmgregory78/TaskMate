@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import * as ExpoStatusBar from 'expo-status-bar';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   ActivityIndicator,
   Platform,
@@ -67,6 +69,16 @@ export default function NotificationPreferencesScreen() {
   const [showReminderTimePicker, setShowReminderTimePicker] = useState(false);
   const [showQuietStartPicker, setShowQuietStartPicker] = useState(false);
   const [showQuietEndPicker, setShowQuietEndPicker] = useState(false);
+
+  // Set dark status bar for light background screen
+  useFocusEffect(
+    useCallback(() => {
+      ExpoStatusBar.setStatusBarStyle('dark');
+      return () => {
+        ExpoStatusBar.setStatusBarStyle('light');
+      };
+    }, [])
+  );
 
   useEffect(() => {
     if (!currentUser?.uid) return;

@@ -96,7 +96,7 @@ export default function App() {
       <NavigationContainer ref={navigationRef}>
         <AutoDepletionHandler />
         <RootNavigator />
-        <StatusBar style="auto" />
+        <StatusBar style="light" />
       </NavigationContainer>
     </SafeAreaProvider>
   );

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
+import * as ExpoStatusBar from 'expo-status-bar';
 import {
   ActivityIndicator,
   ScrollView,
@@ -8,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import ScreenWrapper from '../../components/ScreenWrapper';
 import ScreenHeader from '../../components/ScreenHeader';
 import { useAuth } from '../../hooks/useAuth';
@@ -43,6 +44,16 @@ export default function CreateProductScreen() {
 
   const trimmedName = name.trim();
   const canSubmit = trimmedName.length > 0 && !submitting;
+
+  // Set dark status bar for light background screen
+  useFocusEffect(
+    useCallback(() => {
+      ExpoStatusBar.setStatusBarStyle('dark');
+      return () => {
+        ExpoStatusBar.setStatusBarStyle('light');
+      };
+    }, [])
+  );
 
   const handleSubmit = async () => {
     if (!user || !householdId || !canSubmit) return;
