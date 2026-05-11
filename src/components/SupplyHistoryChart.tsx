@@ -85,7 +85,8 @@ export default function SupplyHistoryChart({ product, history }: Props) {
   const maxY = Math.max(maxQuantity, Math.ceil(Math.max(...chartData.map((h) => h.quantity))));
 
   // Cap sections at reasonable number (max 6) to avoid cluttered Y-axis
-  const numSections = Math.min(maxY, 6);
+  // Ensure at least 1 section to avoid crash when maxY is 0
+  const numSections = Math.max(1, Math.min(maxY, 6));
   const stepValue = maxY > 6 ? Math.ceil(maxY / 6) : 1;
   const adjustedMaxY = numSections * stepValue;
 
