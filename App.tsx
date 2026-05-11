@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { AppState, AppStateStatus } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { AppState, AppStateStatus, LogBox } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -9,6 +9,7 @@ import { navigationRef } from './src/navigation/navigationRef';
 import { useAppStore } from './src/stores/appStore';
 import { runAutoDepletion } from './src/services/autoDepletionService';
 import { getExpiredSnoozedTasks } from './src/services/taskService';
+import { ErrorBoundary } from './src/components/ErrorBoundary';
 
 function AutoDepletionHandler() {
   const householdId = useAppStore((s) => s.currentHouseholdId);
@@ -90,14 +91,38 @@ function AutoDepletionHandler() {
   return null;
 }
 
+console.log('[App] Module loading...');
+
 export default function App() {
+  console.log('[App] App component rendering...');
+
+  // Global error handlers for debugging
+  React.useEffect(() => {
+    console.log('[App] Setting up global error handlers...');
+    const handler = (error: Error, isFatal?: boolean) => {
+      console.log('GLOBAL ERROR:', isFatal ? 'FATAL' : 'non-fatal', error?.message, error?.stack);
+    };
+    // @ts-ignore - ErrorUtils is a React Native global
+    ErrorUtils.setGlobalHandler(handler);
+
+    const rejectionHandler = (event: any) => {
+      console.log('UNHANDLED PROMISE REJECTION:', event?.reason);
+    };
+    // @ts-ignore
+    global.HermesInternal?.hasPromise?.() && Promise._captureStackTrace && null;
+    console.log('[App] Global error handlers set up complete');
+  }, []);
+
+  console.log('[App] About to render SafeAreaProvider...');
   return (
     <SafeAreaProvider>
-      <NavigationContainer ref={navigationRef}>
-        <AutoDepletionHandler />
-        <RootNavigator />
-        <StatusBar style="light" />
-      </NavigationContainer>
+      <ErrorBoundary>
+        <NavigationContainer ref={navigationRef}>
+          <AutoDepletionHandler />
+          <RootNavigator />
+          <StatusBar style="light" />
+        </NavigationContainer>
+      </ErrorBoundary>
     </SafeAreaProvider>
   );
 }

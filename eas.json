@@ -12,10 +12,26 @@
       }
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyC2EWWTTSP6guucNIp8VxvSi3LNfbDIC28",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "taskmate-db13a.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "taskmate-db13a",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "taskmate-db13a.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "908710141011",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:908710141011:web:44d70aac38e9e33a033aa6"
+      }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyC2EWWTTSP6guucNIp8VxvSi3LNfbDIC28",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "taskmate-db13a.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "taskmate-db13a",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "taskmate-db13a.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "908710141011",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:908710141011:web:44d70aac38e9e33a033aa6"
+      }
     }
   },
   "submit": {
