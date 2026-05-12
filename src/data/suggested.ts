@@ -113,6 +113,7 @@ export const SUGGESTED_TASKS: SuggestedTaskCategory[] = [
       { id: 'mulch', name: 'Mulch Garden', category: 'Outdoor', frequency: 'yearly', interval: 1, reminderDaysBefore: 14 },
       { id: 'window-cleaning', name: 'Window Cleaning', category: 'Outdoor', frequency: 'monthly', interval: 6, reminderDaysBefore: 3 },
       { id: 'pressure-wash', name: 'Pressure Wash Patio & Driveway', category: 'Outdoor', frequency: 'yearly', interval: 1, reminderDaysBefore: 14, icon: '💦', linkedSupplies: ['pressure-washer-nozzles'] },
+      { id: 'backflow-preventer', name: 'Backflow Preventer Testing', category: 'Outdoor', frequency: 'yearly', interval: 1, reminderDaysBefore: 30, icon: '💧' },
     ],
   },
   {
@@ -156,7 +157,6 @@ export const SUGGESTED_TASKS: SuggestedTaskCategory[] = [
     emoji: '🔍',
     name: 'Inspections & Services',
     tasks: [
-      { id: 'backflow-preventer', name: 'Backflow Preventer Testing', category: 'Other', frequency: 'yearly', interval: 1, reminderDaysBefore: 30, icon: '💧' },
       { id: 'chimney-sweep', name: 'Chimney Sweep & Inspection', category: 'Other', frequency: 'yearly', interval: 1, reminderDaysBefore: 30, icon: '🏠' },
       { id: 'dryer-vent', name: 'Dryer Vent Cleaning', category: 'Other', frequency: 'yearly', interval: 1, reminderDaysBefore: 14, icon: '🌀' },
       { id: 'septic-pumping', name: 'Septic Tank Pumping', category: 'Other', frequency: 'yearly', interval: 3, reminderDaysBefore: 30, icon: '🔧' },

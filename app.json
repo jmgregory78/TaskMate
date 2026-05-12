@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.jmgregory78.TaskMate",
-      "buildNumber": "2",
+      "buildNumber": "4",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "UIBackgroundModes": [
@@ -45,6 +45,7 @@
       ]
     ],
     "extra": {
+      "internalVersion": "4.002",
       "eas": {
         "projectId": "26d9eb72-7f17-4bfe-9603-4364feaa3bc1"
       }

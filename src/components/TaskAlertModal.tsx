@@ -15,6 +15,7 @@ import {
   View,
 } from 'react-native';
 import { differenceInCalendarDays } from 'date-fns';
+import { formatDaysUntilDue } from '../utils/dateUtils';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Task } from '../types/models';
 import { Colors } from '../constants/colors';
@@ -45,11 +46,10 @@ function urgencyFor(task: Task): {
 } {
   const days = differenceInCalendarDays(task.nextDueDate, new Date());
   if (days < 0) {
-    const n = Math.abs(days);
     return {
       pillBg: '#E53E3E',
       pillLabel: '⚠️ OVERDUE',
-      dueLabel: `Overdue by ${n} day${n === 1 ? '' : 's'}`,
+      dueLabel: formatDaysUntilDue(days),
     };
   }
   if (days === 0) {
@@ -62,7 +62,7 @@ function urgencyFor(task: Task): {
   return {
     pillBg: Colors.primary,
     pillLabel: '🔔 DUE SOON',
-    dueLabel: days === 1 ? 'Due tomorrow' : `Due in ${days} days`,
+    dueLabel: `Due ${formatDaysUntilDue(days)}`,
   };
 }
 

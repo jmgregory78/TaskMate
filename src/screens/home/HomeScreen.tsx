@@ -27,6 +27,7 @@ import {
 } from '../../services/notificationService';
 import { Product, serializeTask, stockPercent, Task } from '../../types/models';
 import { getFirstName } from '../../utils/nameUtils';
+import { formatDueDateShort } from '../../utils/dateUtils';
 import UserAvatar from '../../components/UserAvatar';
 import TaskAlertModal from '../../components/TaskAlertModal';
 import Toast from '../../components/Toast';
@@ -133,16 +134,15 @@ function calculateStarRating(tasks: Task[], products: Product[]): StarRating {
 
 function dueLabel(daysFromToday: number): { text: string; color: string } {
   if (daysFromToday < 0) {
-    const overdueBy = Math.abs(daysFromToday);
     return {
-      text: `Overdue by ${overdueBy}d`,
+      text: formatDueDateShort(daysFromToday),
       color: Colors.urgencyRed,
     };
   }
   if (daysFromToday === 0) return { text: 'Due today', color: Colors.urgencyOrange };
   if (daysFromToday === 1) return { text: 'Due tomorrow', color: Colors.urgencyOrange };
-  if (daysFromToday <= 7) return { text: `Due in ${daysFromToday}d`, color: Colors.urgencyAmber };
-  return { text: `Due in ${daysFromToday}d`, color: Colors.urgencyGray };
+  if (daysFromToday <= 7) return { text: formatDueDateShort(daysFromToday), color: Colors.urgencyAmber };
+  return { text: formatDueDateShort(daysFromToday), color: Colors.urgencyGray };
 }
 
 export default function HomeScreen() {

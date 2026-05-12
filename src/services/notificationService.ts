@@ -269,6 +269,25 @@ export async function cancelAllReminders(): Promise<void> {
   }
 }
 
+/**
+ * Cancel all scheduled notifications EXCEPT those in the preserveIds list.
+ * Used to preserve active snooze notifications when rescheduling regular reminders.
+ */
+export async function cancelRemindersExcept(preserveIds: string[]): Promise<void> {
+  try {
+    const allNotifications = await Notifications.getAllScheduledNotificationsAsync();
+    const preserveSet = new Set(preserveIds);
+
+    for (const notification of allNotifications) {
+      if (!preserveSet.has(notification.identifier)) {
+        await Notifications.cancelScheduledNotificationAsync(notification.identifier);
+      }
+    }
+  } catch (e) {
+    console.warn('[notifications] cancelRemindersExcept failed:', e);
+  }
+}
+
 export async function scheduleAllTaskReminders(
   tasks: Task[],
   householdId: string,
@@ -278,7 +297,16 @@ export async function scheduleAllTaskReminders(
   reminderHour: number = 9,
   reminderMinute: number = 0
 ): Promise<void> {
-  await cancelAllReminders();
+  // Collect notification IDs from snoozed tasks to preserve them
+  const preserveIds: string[] = [];
+  for (const task of tasks) {
+    if (task.pendingNotificationId) {
+      preserveIds.push(task.pendingNotificationId);
+    }
+  }
+
+  // Cancel all reminders EXCEPT the preserved snooze notifications
+  await cancelRemindersExcept(preserveIds);
 
   for (const task of tasks) {
     if (!task.nextDueDate || task.completedToday) continue;

@@ -23,6 +23,7 @@ import {
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Constants from 'expo-constants';
 import { auth, db } from '../config/firebase';
 import { useAuth } from '../hooks/useAuth';
 import { useAppStore } from '../stores/appStore';
@@ -298,6 +299,22 @@ function ProfileDropdown({
           onPress={handleSignOut}
           danger
         />
+
+        <View style={styles.menuDivider} />
+
+        <View style={styles.aboutSection}>
+          <Text style={styles.aboutHeader}>About</Text>
+          <View style={styles.aboutRow}>
+            <Text style={styles.aboutLabel}>App</Text>
+            <Text style={styles.aboutValue}>TaskMate: Home Manager</Text>
+          </View>
+          <View style={styles.aboutRow}>
+            <Text style={styles.aboutLabel}>Version</Text>
+            <Text style={styles.aboutValue}>
+              1.0.0 ({Constants.expoConfig?.extra?.internalVersion ?? '4.001'})
+            </Text>
+          </View>
+        </View>
       </Animated.View>
     </Modal>
   );
@@ -819,5 +836,31 @@ const styles = StyleSheet.create({
   },
   cardButtonDisabled: {
     opacity: 0.6,
+  },
+  aboutSection: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  aboutHeader: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.5)',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  aboutRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  aboutLabel: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.6)',
+  },
+  aboutValue: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.4)',
   },
 });

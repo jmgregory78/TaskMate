@@ -154,7 +154,7 @@ export default function OnboardingScreen({
                   {
                     gap: 28,
                     items: [
-                      ['💊', 'Prescription Medication'],
+                      ['🧯', 'Fire Extinguisher'],
                       ['🛂', 'Renew Passport'],
                     ],
                   },

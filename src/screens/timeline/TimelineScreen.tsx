@@ -15,9 +15,6 @@ import {
   differenceInCalendarDays,
   format,
   startOfDay,
-  addMonths,
-  isSameMonth,
-  isSameYear,
 } from 'date-fns';
 import { useAppStore } from '../../stores/appStore';
 import {
@@ -35,6 +32,7 @@ import {
 } from '../../services/notificationService';
 import { Product, serializeTask, Task, TaskProductUsage } from '../../types/models';
 import { recurrenceShortLabel } from '../../utils/recurrence';
+import { formatDaysUntilDue } from '../../utils/dateUtils';
 import UserAvatar from '../../components/UserAvatar';
 import FAB from '../../components/FAB';
 import TaskTypeSheet from '../../components/TaskTypeSheet';
@@ -71,25 +69,18 @@ function isLowStock(product: Product): boolean {
 }
 
 // Date chip component
-function DateChip({ days, dueDate }: { days: number; dueDate: Date }) {
+function DateChip({ days }: { days: number }) {
   let label: string;
   let style: object;
 
   if (days < 0) {
-    const overdueBy = Math.abs(days);
-    label = `${overdueBy} ${overdueBy === 1 ? 'day' : 'days'} overdue`;
+    label = formatDaysUntilDue(days);
     style = styles.chipOverdue;
   } else if (days === 0) {
     label = 'Due Today';
     style = styles.chipToday;
-  } else if (days === 1) {
-    label = 'Tomorrow';
-    style = styles.chipFuture;
-  } else if (days <= 7) {
-    label = `in ${days} days`;
-    style = styles.chipFuture;
   } else {
-    label = format(dueDate, 'MMM d');
+    label = formatDaysUntilDue(days);
     style = styles.chipFuture;
   }
 
@@ -153,7 +144,7 @@ function TaskCard({
               <Text style={styles.lowStockIndicator}>🔸</Text>
             )}
           </View>
-          {!isCompleted && <DateChip days={days} dueDate={task.nextDueDate} />}
+          {!isCompleted && <DateChip days={days} />}
           {isCompleted && (
             <View style={[styles.chip, styles.chipCompleted]}>
               <Text style={styles.chipTextCompleted}>Done ✓</Text>
@@ -461,9 +452,6 @@ export default function TimelineScreen() {
     const thisMonth: TimelineTask[] = [];
     const futureMonths = new Map<string, TimelineTask[]>();
 
-    // Get date 6 months from now for limiting future tasks
-    const sixMonthsOut = addMonths(today, 6);
-
     // Helper to check if a date is in the current calendar month
     const isCurrentMonth = (date: Date) =>
       date.getMonth() === today.getMonth() &&
@@ -490,9 +478,10 @@ export default function TimelineScreen() {
       } else if (days > 7 && isCurrentMonth(task.nextDueDate)) {
         // This month (more than a week away, but still in current calendar month)
         thisMonth.push(item);
-      } else if (days > 7 && task.nextDueDate <= sixMonthsOut) {
-        // Future months (up to 6 months) - only for dates NOT in current month
-        const monthKey = format(task.nextDueDate, 'yyyy-MM');
+      } else if (days > 7) {
+        // All future months - group by the task's actual due date month/year
+        const dueDate = task.nextDueDate;
+        const monthKey = `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, '0')}`;
         if (!futureMonths.has(monthKey)) {
           futureMonths.set(monthKey, []);
         }
@@ -568,7 +557,10 @@ export default function TimelineScreen() {
         differenceInCalendarDays(a.task.nextDueDate, today) -
         differenceInCalendarDays(b.task.nextDueDate, today)
       );
-      const monthLabel = format(new Date(monthKey + '-01'), 'MMMM yyyy').toUpperCase();
+      // Parse month key to create proper date without timezone issues
+      const [year, month] = monthKey.split('-').map(Number);
+      const monthDate = new Date(year, month - 1, 1); // month is 0-indexed
+      const monthLabel = format(monthDate, 'MMMM yyyy').toUpperCase();
       result.push({
         key: monthKey,
         title: monthLabel,
