@@ -401,7 +401,15 @@ export default function HomeScreen() {
           <UserAvatar />
         </View>
         <Text style={styles.headerTitle}>TaskMate</Text>
-        <View style={[styles.headerSide, styles.headerSideRight]} />
+        <View style={[styles.headerSide, styles.headerSideRight]}>
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() => navigation.navigate('AddTask')}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.addButtonText}>+</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
@@ -641,6 +649,15 @@ export default function HomeScreen() {
         message={toastMessage}
         onDone={() => setToastMessage(null)}
       />
+
+      {/* Floating Action Button */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => navigation.navigate('AddTask')}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.fabIcon}>+</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -677,6 +694,20 @@ const styles = StyleSheet.create({
   },
   headerSideRight: {
     justifyContent: 'flex-end',
+  },
+  addButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addButtonText: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: '600',
+    lineHeight: 24,
   },
   headerTitle: {
     flex: 1,
@@ -901,5 +932,27 @@ const styles = StyleSheet.create({
   seeAllText: {
     ...Typography.bodyBold,
     color: Colors.primary,
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  fabIcon: {
+    color: '#FFFFFF',
+    fontSize: 32,
+    fontWeight: '400',
+    lineHeight: 34,
   },
 });

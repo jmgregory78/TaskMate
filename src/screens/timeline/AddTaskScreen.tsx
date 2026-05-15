@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Platform,
+  Modal,
 } from 'react-native';
 import { RouteProp, useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { format } from 'date-fns';
@@ -115,9 +116,10 @@ export default function AddTaskScreen() {
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showSupplyPrompt, setShowSupplyPrompt] = useState(false);
 
   const [reminderDaysBefore, setReminderDaysBefore] = useState<number | null>(
-    prefill?.reminderDaysBefore ?? 1
+    prefill?.reminderDaysBefore ?? null
   );
 
   const [assignee, setAssignee] = useState<Assignee | null>(() =>
@@ -309,8 +311,9 @@ export default function AddTaskScreen() {
           sel.product.containerUnit
         );
       }
-      // Navigate back to Timeline (Tasks tab) regardless of navigation stack
-      navigation.navigate('Main', { screen: 'Tasks' });
+      // Show prompt asking if user wants to add a supply
+      setSubmitting(false);
+      setShowSupplyPrompt(true);
     } catch (e) {
       const err = e as { code?: string; message?: string };
       const message = err.code
@@ -722,6 +725,46 @@ export default function AddTaskScreen() {
         <Text style={styles.cancelText}>Cancel</Text>
       </TouchableOpacity>
       </ScreenWrapper>
+
+      <Modal
+        visible={showSupplyPrompt}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setShowSupplyPrompt(false);
+          navigation.navigate('Main', { screen: 'Tasks' });
+        }}
+      >
+        <View style={styles.supplyPromptOverlay}>
+          <View style={styles.supplyPromptCard}>
+            <Text style={styles.supplyPromptIcon}>✅</Text>
+            <Text style={styles.supplyPromptTitle}>Task Created!</Text>
+            <Text style={styles.supplyPromptMessage}>
+              Would you like to link a supply to this task? For example, HVAC filters for a filter replacement task.
+            </Text>
+            <TouchableOpacity
+              style={styles.supplyPromptYesButton}
+              onPress={() => {
+                setShowSupplyPrompt(false);
+                navigation.navigate('Main', { screen: 'Supplies' });
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.supplyPromptYesText}>Yes, Add Supply</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.supplyPromptNoButton}
+              onPress={() => {
+                setShowSupplyPrompt(false);
+                navigation.navigate('Main', { screen: 'Tasks' });
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.supplyPromptNoText}>No Thanks</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </>
   );
 }
@@ -1135,5 +1178,62 @@ const styles = StyleSheet.create({
   cancelText: {
     color: '#6B7280',
     fontSize: 16,
+  },
+  supplyPromptOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  supplyPromptCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    paddingVertical: 28,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 340,
+  },
+  supplyPromptIcon: {
+    fontSize: 48,
+    marginBottom: 12,
+  },
+  supplyPromptTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111827',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  supplyPromptMessage: {
+    fontSize: 15,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  supplyPromptYesButton: {
+    width: '100%',
+    paddingVertical: 16,
+    borderRadius: 14,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  supplyPromptYesText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  supplyPromptNoButton: {
+    width: '100%',
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  supplyPromptNoText: {
+    color: '#9CA3AF',
+    fontSize: 15,
+    fontWeight: '500',
   },
 });

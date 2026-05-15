@@ -11,7 +11,8 @@
       "Bash(npm ls:*)",
       "Bash(npm uninstall:*)",
       "Bash(git stash:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(git ls-tree:*)"
     ]
   }
 }

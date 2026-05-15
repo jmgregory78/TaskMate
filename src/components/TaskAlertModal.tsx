@@ -271,7 +271,7 @@ export default function TaskAlertModal({
             </View>
           ) : null}
 
-          <View style={styles.actionRow}>
+          <View style={styles.actionColumn}>
             <TouchableOpacity
               style={[styles.completeButton, isCompletingRef.current && styles.disabled]}
               onPress={() => {
@@ -293,15 +293,14 @@ export default function TaskAlertModal({
             >
               <Text style={styles.actionText}>📋 Open Task</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.snoozeButton}
+              onPress={() => setSnoozeOpen(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.snoozeText}>😴 Snooze</Text>
+            </TouchableOpacity>
           </View>
-
-          <TouchableOpacity
-            style={styles.snoozeButton}
-            onPress={() => setSnoozeOpen(true)}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.snoozeText}>😴 Snooze</Text>
-          </TouchableOpacity>
         </View>
       </Animated.View>
 
@@ -523,14 +522,12 @@ const styles = StyleSheet.create({
   dotInactive: {
     backgroundColor: 'transparent',
   },
-  actionRow: {
-    flexDirection: 'row',
+  actionColumn: {
+    flexDirection: 'column',
     gap: 10,
     paddingHorizontal: 20,
-    marginBottom: 10,
   },
   completeButton: {
-    flex: 1,
     backgroundColor: Colors.primary,
     borderRadius: 12,
     paddingVertical: 14,
@@ -540,8 +537,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   openButton: {
-    flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: '#0D9488',
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
@@ -552,17 +548,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   snoozeButton: {
-    marginHorizontal: 20,
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(255,255,255,0.15)',
     borderRadius: 12,
-    paddingVertical: 12,
+    paddingVertical: 14,
     alignItems: 'center',
   },
   snoozeText: {
     color: 'rgba(255,255,255,0.8)',
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
   },
   lastCompletionNote: {
