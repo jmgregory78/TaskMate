@@ -27,6 +27,7 @@ export function formatDaysUntilDue(days: number): string {
   }
 
   if (days === 0) return 'Today';
+  if (days === 1) return 'in 1 day';
   if (days <= 6) return `in ${days} days`;
 
   // 7-29 days: show in weeks (rounded down)
@@ -36,15 +37,18 @@ export function formatDaysUntilDue(days: number): string {
     return `in ${weeks} weeks`;
   }
 
-  // 30-364 days: show in months (rounded down)
-  if (days < 365) {
-    const months = Math.floor(days / 30);
+  // 30+ days: calculate months first
+  const months = Math.floor(days / 30);
+
+  // 1-11 months: show in months
+  if (months >= 1 && months <= 11) {
     if (months === 1) return 'in 1 month';
     return `in ${months} months`;
   }
 
-  // 365+ days: show in years (rounded down)
+  // 12+ months: show in years (rounded down)
   const years = Math.floor(days / 365);
+  if (years < 1) return 'in 1 year'; // Edge case: 360-364 days = 12 months but < 1 year
   if (years === 1) return 'in 1 year';
   return `in ${years} years`;
 }

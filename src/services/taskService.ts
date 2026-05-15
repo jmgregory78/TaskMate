@@ -31,6 +31,7 @@ import {
   deductProductUsage,
   getProductUsagesForTask,
 } from './productService';
+import { suggestTaskIcon } from './iconService';
 
 type CreateTaskInput = Omit<
   Task,
@@ -170,7 +171,12 @@ export async function createTask(
   data: CreateTaskInput,
   creatorUid?: string
 ): Promise<string> {
-  const icon = '📋';
+  let icon = '📋';
+  try {
+    icon = await suggestTaskIcon(data.name);
+  } catch {
+    // fallback to default icon
+  }
   // assignedTo === undefined means "not provided" — default to creator.
   // assignedTo === null means "explicitly unassigned" — leave null.
   const assignedTo =

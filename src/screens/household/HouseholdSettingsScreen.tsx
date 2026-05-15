@@ -523,7 +523,7 @@ export default function HouseholdSettingsScreen() {
               activeOpacity={0.8}
             >
               <Text style={styles.inviteButtonText}>
-                ➕ Invite a Family Member
+                Invite a Family Member
               </Text>
             </TouchableOpacity>
           ) : null}

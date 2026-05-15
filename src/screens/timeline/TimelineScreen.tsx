@@ -100,12 +100,14 @@ function TaskCard({
   onNotePress,
   isNeedsAttention,
   isCompletedToday,
+  showDateChip,
 }: {
   item: TimelineTask;
   onPress: () => void;
   onNotePress?: () => void;
   isNeedsAttention: boolean;
   isCompletedToday?: boolean;
+  showDateChip: boolean;
 }) {
   const { task, hasLowStockSupply } = item;
   const today = startOfDay(new Date());
@@ -144,7 +146,7 @@ function TaskCard({
               <Text style={styles.lowStockIndicator}>🔸</Text>
             )}
           </View>
-          {!isCompleted && <DateChip days={days} />}
+          {!isCompleted && showDateChip && <DateChip days={days} />}
           {isCompleted && (
             <View style={[styles.chip, styles.chipCompleted]}>
               <Text style={styles.chipTextCompleted}>Done ✓</Text>
@@ -480,8 +482,9 @@ export default function TimelineScreen() {
         thisMonth.push(item);
       } else if (days > 7) {
         // All future months - group by the task's actual due date month/year
+        // Use UTC methods to avoid timezone issues (e.g., July 1 UTC appearing as June 30 local)
         const dueDate = task.nextDueDate;
-        const monthKey = `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, '0')}`;
+        const monthKey = `${dueDate.getUTCFullYear()}-${String(dueDate.getUTCMonth() + 1).padStart(2, '0')}`;
         if (!futureMonths.has(monthKey)) {
           futureMonths.set(monthKey, []);
         }
@@ -557,9 +560,9 @@ export default function TimelineScreen() {
         differenceInCalendarDays(a.task.nextDueDate, today) -
         differenceInCalendarDays(b.task.nextDueDate, today)
       );
-      // Parse month key to create proper date without timezone issues
+      // Parse month key to create proper date using UTC to match how we grouped
       const [year, month] = monthKey.split('-').map(Number);
-      const monthDate = new Date(year, month - 1, 1); // month is 0-indexed
+      const monthDate = new Date(Date.UTC(year, month - 1, 15)); // Use UTC and mid-month to avoid edge cases
       const monthLabel = format(monthDate, 'MMMM yyyy').toUpperCase();
       result.push({
         key: monthKey,
@@ -595,6 +598,8 @@ export default function TimelineScreen() {
 
   const renderItem = ({ item, section }: { item: TimelineTask; section: TimelineSection }) => {
     const isCompletedToday = section.variant === 'completedToday';
+    // Only show date chip for Needs Attention and This Week sections
+    const showDateChip = section.variant === 'attention' || section.variant === 'week';
     return (
       <TaskCard
         item={item}
@@ -608,6 +613,7 @@ export default function TimelineScreen() {
         onNotePress={isCompletedToday ? () => setNoteModalTask(item.task) : undefined}
         isNeedsAttention={section.variant === 'attention'}
         isCompletedToday={isCompletedToday}
+        showDateChip={showDateChip}
       />
     );
   };

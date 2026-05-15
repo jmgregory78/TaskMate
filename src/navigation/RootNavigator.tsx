@@ -53,6 +53,7 @@ import HouseholdSettingsScreen from '../screens/household/HouseholdSettingsScree
 import AppTutorialScreen from '../screens/appguide/AppTutorialScreen';
 import FeedbackScreen from '../screens/appguide/FeedbackScreen';
 import NotificationPreferencesScreen from '../screens/profile/NotificationPreferencesScreen';
+import SettingsScreen from '../screens/profile/SettingsScreen';
 import PendingPurchasePrompt, {
   PendingItem,
 } from '../components/PendingPurchasePrompt';
@@ -126,6 +127,7 @@ export type AppStackParamList = {
   AppTutorial: undefined;
   Feedback: undefined;
   NotificationPreferences: undefined;
+  Settings: undefined;
 };
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
@@ -586,6 +588,7 @@ export default function RootNavigator() {
             name="NotificationPreferences"
             component={NotificationPreferencesScreen}
           />
+          <AppStack.Screen name="Settings" component={SettingsScreen} />
         </AppStack.Navigator>
       );
     }

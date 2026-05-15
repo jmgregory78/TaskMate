@@ -338,6 +338,8 @@ export default function AddTaskScreen() {
             ✨ Pick from suggested tasks →
           </Text>
         </TouchableOpacity>
+        <Text style={styles.requiredNote}>* Required fields</Text>
+        <Text style={styles.label}>Task name <Text style={styles.requiredAsterisk}>*</Text></Text>
         <View style={styles.nameCard}>
           <TextInput
             style={styles.nameInput}
@@ -363,7 +365,7 @@ export default function AddTaskScreen() {
         multiline
       />
 
-      <Text style={styles.label}>First due date</Text>
+      <Text style={styles.label}>First due date <Text style={styles.requiredAsterisk}>*</Text></Text>
       <TouchableOpacity
         style={[
           styles.dateButton,
@@ -791,7 +793,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     fontSize: 16,
-    backgroundColor: Colors.screenBackground,
+    backgroundColor: Colors.cardBackground,
     color: Colors.textPrimary,
   },
   inputMultiline: {
@@ -805,7 +807,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     borderRadius: 8,
     paddingHorizontal: 12,
-    backgroundColor: Colors.screenBackground,
+    backgroundColor: Colors.cardBackground,
     justifyContent: 'center',
   },
   dateButtonEmpty: {
@@ -835,6 +837,16 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: Colors.primaryLight,
     alignSelf: 'flex-start',
+    marginBottom: 12,
+  },
+  requiredNote: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginBottom: 16,
+  },
+  requiredAsterisk: {
+    color: '#EF4444',
+    fontSize: 14,
   },
   suggestedShortcutText: {
     fontSize: 14,
@@ -842,14 +854,14 @@ const styles = StyleSheet.create({
     color: Colors.primary,
   },
   radioGroup: {
-    backgroundColor: Colors.screenBackground,
+    backgroundColor: Colors.cardBackground,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: Colors.border,
     paddingVertical: 4,
   },
   contextBox: {
-    backgroundColor: Colors.screenBackground,
+    backgroundColor: Colors.cardBackground,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: Colors.border,
@@ -1020,7 +1032,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   suppliesBox: {
-    backgroundColor: Colors.screenBackground,
+    backgroundColor: Colors.cardBackground,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: Colors.border,

@@ -282,45 +282,26 @@ export default function OnboardingScreen({
             <Text style={styles.bigEmoji}>📦</Text>
             <Text style={styles.pageTitle}>Never run out</Text>
             <Text style={styles.pageSubtext}>
-              Track the supplies that keep your household running — like your
-              prescription medication. TaskMate calculates how many uses you
-              have left and warns you before you run out.
+              Track the supplies that keep your household running. TaskMate
+              calculates how many uses you have left and warns you before
+              you run out.
             </Text>
 
-            {/* Card 1: Healthy stock */}
+            {/* HVAC Filters example */}
             <View style={styles.exampleCard}>
-              <Text style={styles.exampleIcon}>💊</Text>
+              <Text style={styles.exampleIcon}>❄️</Text>
               <View style={styles.exampleBody}>
-                <Text style={styles.exampleName}>Prescription Medication</Text>
+                <Text style={styles.exampleName}>HVAC Filters</Text>
                 <View style={styles.exampleBar}>
                   <View
                     style={[styles.exampleBarFill, { width: '75%' }]}
                   />
                 </View>
                 <Text style={styles.exampleMeta}>
-                  45 of 60 doses remaining
+                  3 of 4 filters remaining
                 </Text>
                 <Text style={styles.exampleReorder}>
-                  Reorder by: June 24, 2026
-                </Text>
-              </View>
-            </View>
-
-            {/* Card 2: Low stock / needs reordering */}
-            <View style={[styles.exampleCard, styles.exampleCardWarning]}>
-              <Text style={styles.exampleIcon}>❄️</Text>
-              <View style={styles.exampleBody}>
-                <Text style={styles.exampleName}>HVAC Filters</Text>
-                <View style={styles.exampleBar}>
-                  <View
-                    style={[styles.exampleBarFill, styles.exampleBarFillWarning, { width: '25%' }]}
-                  />
-                </View>
-                <Text style={styles.exampleMeta}>
-                  1 of 4 filters remaining
-                </Text>
-                <Text style={styles.exampleWarning}>
-                  ⚠️ Reorder now — running low!
+                  Reorder by: August 1, 2026
                 </Text>
               </View>
             </View>
