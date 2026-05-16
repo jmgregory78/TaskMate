@@ -54,6 +54,7 @@ import AppTutorialScreen from '../screens/appguide/AppTutorialScreen';
 import FeedbackScreen from '../screens/appguide/FeedbackScreen';
 import NotificationPreferencesScreen from '../screens/profile/NotificationPreferencesScreen';
 import SettingsScreen from '../screens/profile/SettingsScreen';
+import TestSuiteScreen from '../screens/dev/TestSuiteScreen';
 import PendingPurchasePrompt, {
   PendingItem,
 } from '../components/PendingPurchasePrompt';
@@ -128,6 +129,7 @@ export type AppStackParamList = {
   Feedback: undefined;
   NotificationPreferences: undefined;
   Settings: undefined;
+  TestSuite: undefined;
 };
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
@@ -539,19 +541,39 @@ export default function RootNavigator() {
       );
     } else {
       navigator = (
-        <AppStack.Navigator screenOptions={{ headerShown: false }}>
+        <AppStack.Navigator
+          screenOptions={{
+            headerShown: false,
+            headerTintColor: '#FFFFFF',
+            headerStyle: { backgroundColor: '#1F2937' },
+            headerTitleStyle: { color: '#FFFFFF', fontWeight: 'bold' },
+          }}
+        >
           <AppStack.Screen name="Main" component={MainTabs} />
           <AppStack.Screen name="AddTask" component={AddTaskScreen} />
           <AppStack.Screen
             name="SuggestedTasks"
             component={SuggestedTasksScreen}
+            options={{
+              headerTintColor: '#FFFFFF',
+              headerStyle: { backgroundColor: '#1F2937' },
+              headerTitleStyle: { color: '#FFFFFF', fontWeight: 'bold' },
+            }}
           />
           <AppStack.Screen name="TaskDetail" component={TaskDetailScreen} />
           <AppStack.Screen
             name="CompletedTaskDetail"
             component={CompletedTaskDetailScreen}
           />
-          <AppStack.Screen name="EditTask" component={EditTaskScreen} />
+          <AppStack.Screen
+            name="EditTask"
+            component={EditTaskScreen}
+            options={{
+              headerTintColor: '#FFFFFF',
+              headerStyle: { backgroundColor: '#1F2937' },
+              headerTitleStyle: { color: '#FFFFFF', fontWeight: 'bold' },
+            }}
+          />
           <AppStack.Screen
             name="AddProductUsage"
             component={AddProductUsageScreen}
@@ -560,10 +582,20 @@ export default function RootNavigator() {
           <AppStack.Screen
             name="ProductDetail"
             component={ProductDetailScreen}
+            options={{
+              headerTintColor: '#FFFFFF',
+              headerStyle: { backgroundColor: '#1F2937' },
+              headerTitleStyle: { color: '#FFFFFF', fontWeight: 'bold' },
+            }}
           />
           <AppStack.Screen
             name="CreateProduct"
             component={CreateProductScreen}
+            options={{
+              headerTintColor: '#FFFFFF',
+              headerStyle: { backgroundColor: '#1F2937' },
+              headerTitleStyle: { color: '#FFFFFF', fontWeight: 'bold' },
+            }}
           />
           <AppStack.Screen
             name="EditProduct"
@@ -572,6 +604,11 @@ export default function RootNavigator() {
           <AppStack.Screen
             name="SuggestedSupplies"
             component={SuggestedSuppliesScreen}
+            options={{
+              headerTintColor: '#FFFFFF',
+              headerStyle: { backgroundColor: '#1F2937' },
+              headerTitleStyle: { color: '#FFFFFF', fontWeight: 'bold' },
+            }}
           />
           <AppStack.Screen
             name="SetupWizard"
@@ -587,8 +624,14 @@ export default function RootNavigator() {
           <AppStack.Screen
             name="NotificationPreferences"
             component={NotificationPreferencesScreen}
+            options={{
+              headerTintColor: '#FFFFFF',
+              headerStyle: { backgroundColor: '#1F2937' },
+              headerTitleStyle: { color: '#FFFFFF', fontWeight: 'bold' },
+            }}
           />
           <AppStack.Screen name="Settings" component={SettingsScreen} />
+          <AppStack.Screen name="TestSuite" component={TestSuiteScreen} />
         </AppStack.Navigator>
       );
     }

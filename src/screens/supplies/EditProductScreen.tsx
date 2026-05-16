@@ -17,6 +17,7 @@ import {
   useRoute,
 } from '@react-navigation/native';
 import ScreenWrapper from '../../components/ScreenWrapper';
+import ScreenHeader from '../../components/ScreenHeader';
 import { useAppStore } from '../../stores/appStore';
 import {
   deleteProduct,
@@ -186,17 +187,9 @@ export default function EditProductScreen() {
   };
 
   return (
-    <ScreenWrapper contentContainerStyle={styles.content}>
-      <View style={styles.headerRow}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.backLink}>← Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.heading}>Edit Supply</Text>
-        <View style={{ width: 80 }} />
-      </View>
+    <>
+      <ScreenHeader title="Edit Supply" leftLabel="Back" />
+      <ScreenWrapper contentContainerStyle={styles.content}>
 
       <View style={styles.card}>
         <Text style={styles.label}>Product name</Text>
@@ -465,13 +458,14 @@ export default function EditProductScreen() {
         <Text style={styles.deleteLinkText}>Delete Supply</Text>
       </TouchableOpacity>
     </ScreenWrapper>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 16,
-    paddingTop: 56,
+    paddingTop: 16,
   },
   headerRow: {
     flexDirection: 'row',

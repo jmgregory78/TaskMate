@@ -12,7 +12,8 @@
       "Bash(npm uninstall:*)",
       "Bash(git stash:*)",
       "Bash(git checkout:*)",
-      "Bash(git ls-tree:*)"
+      "Bash(git ls-tree:*)",
+      "Bash(if not exist \"C:\\\\Users\\\\jason\\\\Documents\\\\TaskMate\\\\src\\\\screens\\\\dev\" mkdir \"C:\\\\Users\\\\jason\\\\Documents\\\\TaskMate\\\\src\\\\screens\\\\dev\")"
     ]
   }
 }

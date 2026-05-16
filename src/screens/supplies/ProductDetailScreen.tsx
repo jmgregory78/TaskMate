@@ -5,6 +5,7 @@ import {
   Alert,
   Linking,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -144,10 +145,10 @@ export default function ProductDetailScreen() {
   const [showPurchaseHistory, setShowPurchaseHistory] = useState(false);
   const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
 
-  // Set dark status bar for light background screen
+  // Set light status bar for dark header screen
   useFocusEffect(
     useCallback(() => {
-      ExpoStatusBar.setStatusBarStyle('dark');
+      ExpoStatusBar.setStatusBarStyle('light');
       return () => {
         ExpoStatusBar.setStatusBarStyle('light');
       };
@@ -390,6 +391,7 @@ export default function ProductDetailScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
+        <StatusBar barStyle="light-content" />
         <ActivityIndicator size="large" />
       </View>
     );
@@ -398,6 +400,7 @@ export default function ProductDetailScreen() {
   if (error || !product) {
     return (
       <View style={styles.center}>
+        <StatusBar barStyle="light-content" />
         <Text style={styles.errorText}>{error ?? 'Product not found'}</Text>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Text style={styles.linkButton}>Go back</Text>
@@ -548,6 +551,7 @@ export default function ProductDetailScreen() {
 
   return (
     <>
+      <StatusBar barStyle="light-content" />
       <ScreenHeader
         title=""
         leftLabel="Supplies"

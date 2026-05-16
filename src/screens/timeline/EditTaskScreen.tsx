@@ -7,6 +7,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -143,10 +144,10 @@ export default function EditTaskScreen() {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Set dark status bar for light background screen
+  // Set light status bar for dark header screen
   useFocusEffect(
     useCallback(() => {
-      ExpoStatusBar.setStatusBarStyle('dark');
+      ExpoStatusBar.setStatusBarStyle('light');
       return () => {
         ExpoStatusBar.setStatusBarStyle('light');
       };
@@ -394,6 +395,7 @@ export default function EditTaskScreen() {
   if (loading) {
     return (
       <View style={styles.screen}>
+        <StatusBar barStyle="light-content" />
         <ScreenHeader title="Edit Task" leftLabel="Back" />
         <View style={styles.center}>
           <ActivityIndicator size="large" color={Colors.primary} />
@@ -405,6 +407,7 @@ export default function EditTaskScreen() {
   if (loadError || !task) {
     return (
       <View style={styles.screen}>
+        <StatusBar barStyle="light-content" />
         <ScreenHeader title="Edit Task" leftLabel="Back" />
         <View style={styles.center}>
           <Text style={styles.errorText}>{loadError ?? 'Task not found'}</Text>
@@ -415,6 +418,7 @@ export default function EditTaskScreen() {
 
   return (
     <>
+      <StatusBar barStyle="light-content" />
       <View style={styles.screen}>
         <ScreenHeader
           title="Edit Task"

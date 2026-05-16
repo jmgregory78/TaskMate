@@ -7,6 +7,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -127,10 +128,10 @@ export default function SuggestedSuppliesScreen() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [addedSupplyCount, setAddedSupplyCount] = useState(0);
 
-  // Set dark status bar for light background screen
+  // Set light status bar for dark header screen
   useFocusEffect(
     useCallback(() => {
-      ExpoStatusBar.setStatusBarStyle('dark');
+      ExpoStatusBar.setStatusBarStyle('light');
       return () => {
         ExpoStatusBar.setStatusBarStyle('light');
       };
@@ -340,6 +341,7 @@ export default function SuggestedSuppliesScreen() {
   if (!loaded) {
     return (
       <View style={styles.flex}>
+        <StatusBar barStyle="light-content" />
         <SafeAreaView edges={['top']} style={styles.safeTop} />
         <View style={[styles.container, styles.center]}>
           <ActivityIndicator size="large" color={Colors.primary} />
@@ -351,6 +353,7 @@ export default function SuggestedSuppliesScreen() {
   if (allAlreadyAdded) {
     return (
       <View style={styles.flex}>
+        <StatusBar barStyle="light-content" />
         <SafeAreaView edges={['top']} style={styles.safeTop} />
         <View style={styles.container}>
           <Header
@@ -382,6 +385,7 @@ export default function SuggestedSuppliesScreen() {
 
   return (
     <View style={styles.flex}>
+      <StatusBar barStyle="light-content" />
       <SafeAreaView edges={['top']} style={styles.safeTop} />
       <KeyboardAvoidingView
         style={styles.container}

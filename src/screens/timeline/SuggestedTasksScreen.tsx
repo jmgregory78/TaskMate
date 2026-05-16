@@ -6,6 +6,7 @@ import {
   Modal,
   Platform,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -36,6 +37,7 @@ import {
   SuggestedSupply,
 } from '../../data/suggested';
 import { Colors } from '../../constants/colors';
+import ReminderPicker from '../../components/ReminderPicker';
 
 interface TaskGroup {
   category: WizardCategory;
@@ -57,24 +59,6 @@ const FREQUENCY_OPTIONS: { key: RecurrenceFrequency; label: string }[] = [
   { key: 'yearly', label: 'Yearly' },
 ];
 
-const REMINDER_OPTIONS: { days: number | null; label: string }[] = [
-  { days: null, label: 'No Advance Reminder' },
-  { days: 1, label: '1 day before' },
-  { days: 3, label: '3 days before' },
-  { days: 7, label: '1 week before' },
-];
-
-const REMINDER_PRESET_VALUES = new Set(
-  REMINDER_OPTIONS.map((o) => o.days).filter((d): d is number => d !== null)
-);
-
-type CustomReminderUnit = 'days' | 'weeks' | 'months';
-
-const CUSTOM_UNIT_OPTIONS: { key: CustomReminderUnit; label: string; multiplier: number }[] = [
-  { key: 'days', label: 'Days', multiplier: 1 },
-  { key: 'weeks', label: 'Weeks', multiplier: 7 },
-  { key: 'months', label: 'Months', multiplier: 30 },
-];
 
 function normalize(name: string): string {
   return name.trim().toLowerCase();
@@ -83,28 +67,6 @@ function normalize(name: string): string {
 function parsePositiveInt(value: string, fallback: number): number {
   const n = parseInt(value, 10);
   return Number.isFinite(n) && n > 0 ? n : fallback;
-}
-
-function customReminderLabel(days: number): string {
-  if (days % 30 === 0 && days >= 30) {
-    const months = days / 30;
-    return `${months} ${months === 1 ? 'month' : 'months'} before`;
-  }
-  if (days % 7 === 0 && days >= 7) {
-    const weeks = days / 7;
-    return `${weeks} ${weeks === 1 ? 'week' : 'weeks'} before`;
-  }
-  return `${days} ${days === 1 ? 'day' : 'days'} before`;
-}
-
-function daysToUnitAndValue(days: number): { value: number; unit: CustomReminderUnit } {
-  if (days % 30 === 0 && days >= 30) {
-    return { value: days / 30, unit: 'months' };
-  }
-  if (days % 7 === 0 && days >= 7) {
-    return { value: days / 7, unit: 'weeks' };
-  }
-  return { value: days, unit: 'days' };
 }
 
 function unitWord(frequency: RecurrenceFrequency, interval: number): string {
@@ -143,10 +105,10 @@ export default function SuggestedTasksScreen() {
   const [pendingSupplies, setPendingSupplies] = useState<SuggestedSupply[]>([]);
   const [addedTaskIds, setAddedTaskIds] = useState<string[]>([]);
 
-  // Set dark status bar for light background screen
+  // Set light status bar for dark header screen
   useFocusEffect(
     useCallback(() => {
-      ExpoStatusBar.setStatusBarStyle('dark');
+      ExpoStatusBar.setStatusBarStyle('light');
       return () => {
         ExpoStatusBar.setStatusBarStyle('light');
       };
@@ -369,6 +331,7 @@ export default function SuggestedTasksScreen() {
   if (!loaded) {
     return (
       <View style={styles.flex}>
+        <StatusBar barStyle="light-content" />
         <SafeAreaView edges={['top']} style={styles.safeTop} />
         <View style={[styles.container, styles.center]}>
           <ActivityIndicator size="large" color={Colors.primary} />
@@ -380,6 +343,7 @@ export default function SuggestedTasksScreen() {
   if (allAlreadyAdded) {
     return (
       <View style={styles.flex}>
+        <StatusBar barStyle="light-content" />
         <SafeAreaView edges={['top']} style={styles.safeTop} />
         <View style={styles.container}>
           <Header
@@ -411,6 +375,7 @@ export default function SuggestedTasksScreen() {
 
   return (
     <View style={styles.flex}>
+      <StatusBar barStyle="light-content" />
       <SafeAreaView edges={['top']} style={styles.safeTop} />
       <KeyboardAvoidingView
         style={styles.container}
@@ -686,52 +651,6 @@ function ConfigureTaskStep({
   submitting: boolean;
   error: string | null;
 }) {
-  const isCustomValue = draft.reminderDays !== null && !REMINDER_PRESET_VALUES.has(draft.reminderDays);
-  const initialCustom = isCustomValue && draft.reminderDays !== null
-    ? daysToUnitAndValue(draft.reminderDays)
-    : { value: 1, unit: 'days' as CustomReminderUnit };
-  const [showCustomInput, setShowCustomInput] = useState(isCustomValue);
-  const [customValue, setCustomValue] = useState(String(initialCustom.value));
-  const [customUnit, setCustomUnit] = useState<CustomReminderUnit>(initialCustom.unit);
-
-  const handleSelectPreset = (days: number | null) => {
-    setShowCustomInput(false);
-    onUpdateDraft({ reminderDays: days });
-  };
-
-  const handleSelectCustom = () => {
-    setShowCustomInput(true);
-    const multiplier = CUSTOM_UNIT_OPTIONS.find((u) => u.key === customUnit)?.multiplier ?? 1;
-    const num = parseInt(customValue, 10) || 1;
-    onUpdateDraft({ reminderDays: num * multiplier });
-  };
-
-  const handleCustomValueChange = (text: string) => {
-    const digitsOnly = text.replace(/\D/g, '');
-    setCustomValue(digitsOnly);
-    const num = parseInt(digitsOnly, 10) || 1;
-    const multiplier = CUSTOM_UNIT_OPTIONS.find((u) => u.key === customUnit)?.multiplier ?? 1;
-    onUpdateDraft({ reminderDays: num * multiplier });
-  };
-
-  const handleUnitChange = (unit: CustomReminderUnit) => {
-    setCustomUnit(unit);
-    const num = parseInt(customValue, 10) || 1;
-    const multiplier = CUSTOM_UNIT_OPTIONS.find((u) => u.key === unit)?.multiplier ?? 1;
-    onUpdateDraft({ reminderDays: num * multiplier });
-  };
-
-  const handleConfirmCustom = () => {
-    const num = parseInt(customValue, 10) || 1;
-    const multiplier = CUSTOM_UNIT_OPTIONS.find((u) => u.key === customUnit)?.multiplier ?? 1;
-    onUpdateDraft({ reminderDays: num * multiplier });
-    setShowCustomInput(false);
-  };
-
-  const customDisplayLabel = isCustomValue && draft.reminderDays !== null
-    ? customReminderLabel(draft.reminderDays)
-    : 'Custom...';
-
   return (
     <>
       <View style={styles.titleBlock}>
@@ -823,108 +742,10 @@ function ConfigureTaskStep({
         </View>
 
         <Text style={styles.fieldLabel}>Advance Reminder</Text>
-        <View style={styles.reminderColumn}>
-          {REMINDER_OPTIONS.map((opt) => {
-            const active = opt.days === draft.reminderDays && !showCustomInput;
-            const key = opt.days === null ? 'none' : String(opt.days);
-            const isNoAdvanceReminder = opt.days === null;
-            return (
-              <View key={key}>
-                <TouchableOpacity
-                  style={[styles.reminderRow, active && styles.reminderRowOn]}
-                  onPress={() => handleSelectPreset(opt.days)}
-                  activeOpacity={0.7}
-                  disabled={submitting}
-                >
-                  <Text
-                    style={[
-                      styles.reminderText,
-                      active && styles.reminderTextOn,
-                    ]}
-                  >
-                    {opt.label}
-                  </Text>
-                  {active ? (
-                    <Text style={styles.reminderCheck}>✓</Text>
-                  ) : null}
-                </TouchableOpacity>
-                {isNoAdvanceReminder ? (
-                  <Text style={styles.reminderSubtitle}>
-                    You'll still get a task alert on the due date
-                  </Text>
-                ) : null}
-              </View>
-            );
-          })}
-          {/* Custom option */}
-          <TouchableOpacity
-            style={[
-              styles.reminderRow,
-              (isCustomValue || showCustomInput) && styles.reminderRowOn,
-            ]}
-            onPress={handleSelectCustom}
-            activeOpacity={0.7}
-            disabled={submitting}
-          >
-            <Text
-              style={[
-                styles.reminderText,
-                (isCustomValue || showCustomInput) && styles.reminderTextOn,
-              ]}
-            >
-              {customDisplayLabel}
-            </Text>
-            {isCustomValue && !showCustomInput ? (
-              <Text style={styles.reminderCheck}>✓</Text>
-            ) : null}
-          </TouchableOpacity>
-          {showCustomInput ? (
-            <View style={styles.customReminderBox}>
-              <View style={styles.customReminderRow}>
-                <TextInput
-                  style={styles.customReminderInput}
-                  value={customValue}
-                  onChangeText={handleCustomValueChange}
-                  keyboardType="number-pad"
-                  maxLength={3}
-                  selectTextOnFocus
-                  editable={!submitting}
-                />
-                <View style={styles.customUnitRow}>
-                  {CUSTOM_UNIT_OPTIONS.map((u) => {
-                    const active = customUnit === u.key;
-                    return (
-                      <TouchableOpacity
-                        key={u.key}
-                        style={[styles.customUnitChip, active && styles.customUnitChipOn]}
-                        onPress={() => handleUnitChange(u.key)}
-                        activeOpacity={0.7}
-                        disabled={submitting}
-                      >
-                        <Text
-                          style={[
-                            styles.customUnitText,
-                            active && styles.customUnitTextOn,
-                          ]}
-                        >
-                          {u.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-              <TouchableOpacity
-                style={styles.customConfirmButton}
-                onPress={handleConfirmCustom}
-                activeOpacity={0.7}
-                disabled={submitting}
-              >
-                <Text style={styles.customConfirmText}>Confirm</Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
-        </View>
+        <ReminderPicker
+          value={draft.reminderDays}
+          onChange={(days) => onUpdateDraft({ reminderDays: days })}
+        />
       </ScrollView>
       <View style={styles.bottomBar}>
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -1261,106 +1082,6 @@ const styles = StyleSheet.create({
   intervalUnit: {
     fontSize: 15,
     color: Colors.textSecondary,
-  },
-  reminderColumn: {
-    gap: 8,
-  },
-  reminderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: Colors.cardBackground,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  reminderRowOn: {
-    borderColor: Colors.primary,
-    backgroundColor: Colors.primaryLight,
-  },
-  reminderText: {
-    fontSize: 15,
-    color: Colors.textPrimary,
-  },
-  reminderTextOn: {
-    fontWeight: '600',
-    color: Colors.primary,
-  },
-  reminderCheck: {
-    fontSize: 16,
-    color: Colors.primary,
-    fontWeight: '700',
-  },
-  reminderSubtitle: {
-    fontSize: 12,
-    color: Colors.textMuted,
-    marginTop: 4,
-    marginLeft: 14,
-    marginBottom: 4,
-  },
-  customReminderBox: {
-    backgroundColor: Colors.cardBackground,
-    borderRadius: 10,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: Colors.primary,
-    marginTop: -4,
-  },
-  customReminderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  customReminderInput: {
-    width: 60,
-    height: 44,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.screenBackground,
-    textAlign: 'center',
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.textPrimary,
-  },
-  customUnitRow: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  customUnitChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.screenBackground,
-  },
-  customUnitChipOn: {
-    borderColor: Colors.primary,
-    backgroundColor: Colors.primaryLight,
-  },
-  customUnitText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-  },
-  customUnitTextOn: {
-    color: Colors.primary,
-  },
-  customConfirmButton: {
-    marginTop: 12,
-    alignSelf: 'flex-end',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: Colors.primary,
-    borderRadius: 8,
-  },
-  customConfirmText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
   },
   // Supply prompt modal styles
   modalOverlay: {

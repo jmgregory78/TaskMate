@@ -28,6 +28,8 @@ const OPTIONS: Option[] = [
   { label: 'Custom', value: 'custom' },
 ];
 
+const PRESET_VALUES = new Set([null, 1, 7]);
+
 const UNIT_OPTIONS: { key: CustomUnit; label: string; multiplier: number }[] = [
   { key: 'days', label: 'Days', multiplier: 1 },
   { key: 'weeks', label: 'Weeks', multiplier: 7 },
@@ -59,50 +61,49 @@ export function reminderLabel(daysBefore: number | undefined | null): string {
   return `${d} days before`;
 }
 
-function isCustomValue(value: number | null): boolean {
-  if (value === null) return false;
-  return value !== 1 && value !== 7;
+// Check if a value is a non-preset custom value
+function isNonPresetValue(value: number | null): boolean {
+  return value !== null && !PRESET_VALUES.has(value);
 }
 
 export default function ReminderPicker({ value, onChange }: Props) {
   const [showDropdown, setShowDropdown] = useState(false);
-  const [showCustomFields, setShowCustomFields] = useState(() => isCustomValue(value));
+  // Track if user has explicitly selected Custom mode
+  const [isCustomMode, setIsCustomMode] = useState(() => isNonPresetValue(value));
   const [showNumberPicker, setShowNumberPicker] = useState(false);
   const [showUnitPicker, setShowUnitPicker] = useState(false);
 
   // Initialize custom values from current value
-  const initialCustom = value && isCustomValue(value) ? daysToUnitAndValue(value) : { value: 1, unit: 'days' as CustomUnit };
+  const initialCustom = value !== null && value > 0 ? daysToUnitAndValue(value) : { value: 1, unit: 'days' as CustomUnit };
   const [customNumber, setCustomNumber] = useState(initialCustom.value);
   const [customUnit, setCustomUnit] = useState<CustomUnit>(initialCustom.unit);
 
-  const isCustom = isCustomValue(value);
-  const displayLabel = isCustom
-    ? reminderLabel(value)
+  // Determine display label
+  const displayLabel = isCustomMode
+    ? 'Custom'
     : (OPTIONS.find((o) => o.value === value)?.label ?? 'No Advance Reminder');
 
-  // Update custom fields when value changes externally
+  // Update custom mode when value changes externally to a non-preset value
   useEffect(() => {
-    if (value && isCustomValue(value)) {
-      const parsed = daysToUnitAndValue(value);
+    if (isNonPresetValue(value)) {
+      const parsed = daysToUnitAndValue(value!);
       setCustomNumber(parsed.value);
       setCustomUnit(parsed.unit);
-      setShowCustomFields(true);
-    } else {
-      setShowCustomFields(false);
+      setIsCustomMode(true);
     }
   }, [value]);
 
   const handleSelect = (option: Option) => {
     if (option.value === 'custom') {
       setShowDropdown(false);
-      setShowCustomFields(true);
-      // Set initial custom value
+      setIsCustomMode(true);
+      // Set initial custom value based on current custom settings
       const multiplier = UNIT_OPTIONS.find((u) => u.key === customUnit)?.multiplier ?? 1;
       onChange(customNumber * multiplier);
     } else {
+      setIsCustomMode(false);
       onChange(option.value as number | null);
       setShowDropdown(false);
-      setShowCustomFields(false);
     }
   };
 
@@ -133,14 +134,8 @@ export default function ReminderPicker({ value, onChange }: Props) {
         <Text style={styles.dropdownArrow}>▼</Text>
       </TouchableOpacity>
 
-      {value === null ? (
-        <Text style={styles.noReminderSubtitle}>
-          You'll still get a task alert on the due date
-        </Text>
-      ) : null}
-
-      {/* Custom Fields - shown inline when Custom is selected */}
-      {showCustomFields ? (
+      {/* Custom Fields - shown inline only when Custom is selected */}
+      {isCustomMode ? (
         <View style={styles.customFieldsContainer}>
           <View style={styles.customFieldsRow}>
             {/* Number Picker */}
@@ -167,6 +162,10 @@ export default function ReminderPicker({ value, onChange }: Props) {
         </View>
       ) : null}
 
+      <Text style={styles.explanatoryText}>
+        This sends an early heads-up so you have time to prepare. You'll always get an alert on the due date regardless.
+      </Text>
+
       {/* Main Dropdown Modal */}
       <Modal
         visible={showDropdown}
@@ -183,8 +182,8 @@ export default function ReminderPicker({ value, onChange }: Props) {
             <Text style={styles.modalTitle}>Advance Reminder</Text>
             {OPTIONS.map((option) => {
               const isSelected = option.value === 'custom'
-                ? isCustom
-                : option.value === value;
+                ? isCustomMode
+                : (!isCustomMode && option.value === value);
               return (
                 <TouchableOpacity
                   key={option.value === null ? 'none' : String(option.value)}
@@ -297,10 +296,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textMuted,
   },
-  noReminderSubtitle: {
+  explanatoryText: {
     fontSize: 12,
-    color: Colors.textMuted,
-    marginTop: 6,
+    color: '#6B7280',
+    marginTop: 8,
+    lineHeight: 18,
   },
   customFieldsContainer: {
     marginTop: 12,

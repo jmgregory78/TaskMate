@@ -5,6 +5,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  StatusBar,
   StyleSheet,
   Platform,
   Modal,
@@ -133,10 +134,10 @@ export default function AddTaskScreen() {
 
   const [notes, setNotes] = useState('');
 
-  // Set dark status bar for light background screen
+  // Set light status bar for dark header screen
   useFocusEffect(
     useCallback(() => {
-      ExpoStatusBar.setStatusBarStyle('dark');
+      ExpoStatusBar.setStatusBarStyle('light');
       return () => {
         ExpoStatusBar.setStatusBarStyle('light');
       };
@@ -330,6 +331,7 @@ export default function AddTaskScreen() {
 
   return (
     <>
+      <StatusBar barStyle="light-content" />
       <ScreenHeader title="New Task" leftLabel="Back" onLeftPress={handleBack} />
       <ScreenWrapper contentContainerStyle={styles.content}>
         <TouchableOpacity

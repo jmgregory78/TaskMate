@@ -3,6 +3,7 @@ import * as ExpoStatusBar from 'expo-status-bar';
 import {
   ActivityIndicator,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -45,10 +46,10 @@ export default function CreateProductScreen() {
   const trimmedName = name.trim();
   const canSubmit = trimmedName.length > 0 && !submitting;
 
-  // Set dark status bar for light background screen
+  // Set light status bar for dark header screen
   useFocusEffect(
     useCallback(() => {
-      ExpoStatusBar.setStatusBarStyle('dark');
+      ExpoStatusBar.setStatusBarStyle('light');
       return () => {
         ExpoStatusBar.setStatusBarStyle('light');
       };
@@ -146,6 +147,7 @@ export default function CreateProductScreen() {
 
   return (
     <>
+      <StatusBar barStyle="light-content" />
       <ScreenHeader
         title="New Supply"
         leftLabel="Supplies"

@@ -122,6 +122,8 @@ function ProfileDropdown({
   const insets = useSafeAreaInsets();
   const dropdownAnim = useRef(new Animated.Value(0)).current;
   const [mounted, setMounted] = useState(visible);
+  const [versionTaps, setVersionTaps] = useState(0);
+  const versionTapTimeout = useRef<NodeJS.Timeout | null>(null);
 
   const safeNavigate = (screenName: string) => {
     onClose();
@@ -169,6 +171,33 @@ function ProfileDropdown({
       Alert.alert('Sign out failed', err.message ?? String(e));
     }
   };
+
+  const handleVersionTap = () => {
+    // Clear existing timeout
+    if (versionTapTimeout.current) {
+      clearTimeout(versionTapTimeout.current);
+    }
+
+    const newTaps = versionTaps + 1;
+    setVersionTaps(newTaps);
+
+    if (newTaps >= 5) {
+      // Navigate to test suite
+      setVersionTaps(0);
+      onClose();
+      setTimeout(() => {
+        navigation.navigate('TestSuite');
+      }, 100);
+      return;
+    }
+
+    // Reset tap count after 2 seconds of inactivity
+    versionTapTimeout.current = setTimeout(() => {
+      setVersionTaps(0);
+    }, 2000);
+  };
+
+  const versionHint = versionTaps >= 3 ? ' 🧪' : '';
 
   const dropdownTransform = {
     opacity: dropdownAnim,
@@ -231,12 +260,16 @@ function ProfileDropdown({
             <Text style={styles.aboutLabel}>App</Text>
             <Text style={styles.aboutValue}>TaskMate: Home Manager</Text>
           </View>
-          <View style={styles.aboutRow}>
+          <TouchableOpacity
+            style={styles.aboutRow}
+            onPress={handleVersionTap}
+            activeOpacity={0.6}
+          >
             <Text style={styles.aboutLabel}>Version</Text>
             <Text style={styles.aboutValue}>
-              {Constants.expoConfig?.extra?.internalVersion ?? '4.010'}
+              {Constants.expoConfig?.extra?.internalVersion ?? '4.010'}{versionHint}
             </Text>
-          </View>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.menuDivider} />
