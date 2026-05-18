@@ -111,6 +111,8 @@ export interface Task {
   assignedAt: Date | null;
   assignedBy: string | null;
   reminderDaysBefore: number | null;
+  reminderHour?: number;
+  reminderMinute?: number;
   snoozedUntil: Date | null;
   pendingNotificationId: string | null;
   // Notes fields
@@ -293,6 +295,8 @@ export interface SerializedTask {
   assignedAt: string | null;
   assignedBy: string | null;
   reminderDaysBefore: number | null;
+  reminderHour?: number;
+  reminderMinute?: number;
   snoozedUntil: string | null;
   pendingNotificationId: string | null;
   notes?: string;

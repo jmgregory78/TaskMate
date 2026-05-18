@@ -357,8 +357,8 @@ export default function SuggestedSuppliesScreen() {
         <SafeAreaView edges={['top']} style={styles.safeTop} />
         <View style={styles.container}>
           <Header
-            showBack={false}
-            onBack={handleConfigureBack}
+            showBack={true}
+            onBack={handleClose}
             showClose={true}
             onClose={handleClose}
           />
@@ -392,8 +392,8 @@ export default function SuggestedSuppliesScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <Header
-          showBack={inConfigQueue}
-          onBack={handleConfigureBack}
+          showBack={true}
+          onBack={inConfigQueue ? handleConfigureBack : handleClose}
           showClose={!inConfigQueue}
           onClose={handleClose}
         />
@@ -450,7 +450,7 @@ function Header({
             activeOpacity={0.7}
             accessibilityLabel="Back"
           >
-            <Text style={styles.backIcon}>‹</Text>
+            <Text style={styles.backText}>‹ Back</Text>
           </TouchableOpacity>
         ) : null}
       </View>
@@ -1022,15 +1022,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   header: {
+    height: 56,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
     backgroundColor: Colors.headerBackground,
   },
   headerSlot: {
-    width: 40,
+    minWidth: 60,
   },
   headerSlotRight: {
     alignItems: 'flex-end',
@@ -1045,10 +1045,10 @@ const styles = StyleSheet.create({
     color: Colors.textOnDark,
     textAlign: 'center',
   },
-  backIcon: {
-    fontSize: 28,
-    color: Colors.textOnDark,
-    fontWeight: '300',
+  backText: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
   closeText: {
     fontSize: 20,

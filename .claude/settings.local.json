@@ -13,7 +13,9 @@
       "Bash(git stash:*)",
       "Bash(git checkout:*)",
       "Bash(git ls-tree:*)",
-      "Bash(if not exist \"C:\\\\Users\\\\jason\\\\Documents\\\\TaskMate\\\\src\\\\screens\\\\dev\" mkdir \"C:\\\\Users\\\\jason\\\\Documents\\\\TaskMate\\\\src\\\\screens\\\\dev\")"
+      "Bash(if not exist \"C:\\\\Users\\\\jason\\\\Documents\\\\TaskMate\\\\src\\\\screens\\\\dev\" mkdir \"C:\\\\Users\\\\jason\\\\Documents\\\\TaskMate\\\\src\\\\screens\\\\dev\")",
+      "Bash(git rm:*)",
+      "Bash(grep -iv \"icon\\\\|button\\\\|card\\\\|chip\\\\|input\\\\|tab\\\\|modal\\\\|switch\\\\|thumb\\\\|stepper\\\\|pill\\\\|stat\\\\|star\\\\|dot\\\\|bar\\\\b.*{$\\\\|checkbox\\\\|intervalInput\\\\|qtyInput\\\\|thresholdInput\\\\|autoRate\")"
     ]
   }
 }

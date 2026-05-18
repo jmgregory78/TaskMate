@@ -214,6 +214,8 @@ export async function createTask(
         : typeof data.reminderDaysBefore === 'number'
           ? data.reminderDaysBefore
           : 1,
+    reminderHour: data.reminderHour ?? 9,
+    reminderMinute: data.reminderMinute ?? 0,
     notes: data.notes ?? null,
     nextTimeReminder: null,
     lastCompletionNote: null,

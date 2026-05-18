@@ -43,7 +43,7 @@ export default function ScreenHeader({
     <View
       style={[
         styles.wrapper,
-        { paddingTop: insets.top, height: 60 + insets.top },
+        { paddingTop: insets.top, height: 56 + insets.top },
         style,
       ]}
     >

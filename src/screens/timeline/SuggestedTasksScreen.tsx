@@ -90,6 +90,7 @@ export default function SuggestedTasksScreen() {
   const [existingTaskNames, setExistingTaskNames] = useState<Set<string>>(new Set());
   const [expandedCategoryIds, setExpandedCategoryIds] = useState<Set<WizardCategoryId>>(new Set());
   const [checkedTaskIds, setCheckedTaskIds] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Task configuration queue state
   const [configIndex, setConfigIndex] = useState<number | null>(null);
@@ -347,8 +348,8 @@ export default function SuggestedTasksScreen() {
         <SafeAreaView edges={['top']} style={styles.safeTop} />
         <View style={styles.container}>
           <Header
-            showBack={false}
-            onBack={handleConfigureBack}
+            showBack={true}
+            onBack={handleClose}
             showClose={true}
             onClose={handleClose}
           />
@@ -382,8 +383,8 @@ export default function SuggestedTasksScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <Header
-          showBack={inConfigQueue}
-          onBack={handleConfigureBack}
+          showBack={true}
+          onBack={inConfigQueue ? handleConfigureBack : handleClose}
           showClose={!inConfigQueue}
           onClose={handleClose}
         />
@@ -413,6 +414,8 @@ export default function SuggestedTasksScreen() {
             onToggleTask={toggleTask}
             onAdd={startConfigureQueue}
             checkedCount={checkedTasks.length}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
           />
         )}
       </KeyboardAvoidingView>
@@ -488,7 +491,7 @@ function Header({
             activeOpacity={0.7}
             accessibilityLabel="Back"
           >
-            <Text style={styles.backIcon}>‹</Text>
+            <Text style={styles.backText}>‹ Back</Text>
           </TouchableOpacity>
         ) : null}
       </View>
@@ -519,6 +522,8 @@ function TaskAccordion({
   onToggleTask,
   onAdd,
   checkedCount,
+  searchQuery,
+  onSearchChange,
 }: {
   groups: TaskGroup[];
   expandedIds: Set<WizardCategoryId>;
@@ -527,6 +532,8 @@ function TaskAccordion({
   onToggleTask: (id: string) => void;
   onAdd: () => void;
   checkedCount: number;
+  searchQuery: string;
+  onSearchChange: (q: string) => void;
 }) {
   const selectedCountByCategory = (categoryId: WizardCategoryId): number => {
     const group = groups.find((g) => g.category.id === categoryId);
@@ -534,64 +541,127 @@ function TaskAccordion({
     return group.items.filter((t) => checkedIds.has(t.id)).length;
   };
 
+  const isSearching = searchQuery.trim().length > 0;
+  const searchResults = useMemo(() => {
+    if (!isSearching) return [];
+    const q = searchQuery.trim().toLowerCase();
+    return groups.flatMap((g) =>
+      g.items.filter((t) => t.name.toLowerCase().includes(q))
+    );
+  }, [groups, searchQuery, isSearching]);
+
   return (
     <>
       <View style={styles.titleBlock}>
         <Text style={styles.title}>Browse Suggested Tasks</Text>
         <Text style={styles.subtitle}>Choose the tasks you want to track</Text>
       </View>
+      <View style={styles.searchContainer}>
+        <View style={styles.searchBox}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search tasks..."
+            placeholderTextColor={Colors.textLight}
+            value={searchQuery}
+            onChangeText={onSearchChange}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 ? (
+            <TouchableOpacity
+              onPress={() => onSearchChange('')}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              activeOpacity={0.6}
+            >
+              <Text style={styles.searchClear}>✕</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      </View>
       <ScrollView
         style={styles.flex}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
-        {groups.map((g) => {
-          const expanded = expandedIds.has(g.category.id);
-          const selectedCount = selectedCountByCategory(g.category.id);
-          return (
-            <View key={g.category.id} style={styles.accordionCard}>
-              <TouchableOpacity
-                style={styles.accordionHeader}
-                onPress={() => onToggleExpand(g.category.id)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.categoryEmoji}>{g.category.emoji}</Text>
-                <Text style={styles.accordionTitle}>{g.category.name}</Text>
-                {selectedCount > 0 ? (
-                  <View style={styles.selectedBadge}>
-                    <Text style={styles.selectedBadgeText}>
-                      {selectedCount} selected
-                    </Text>
+        {isSearching ? (
+          searchResults.length === 0 ? (
+            <Text style={styles.searchEmpty}>No tasks matching "{searchQuery}"</Text>
+          ) : (
+            <View style={styles.accordionCard}>
+              {searchResults.map((t, idx) => {
+                const checked = checkedIds.has(t.id);
+                return (
+                  <TouchableOpacity
+                    key={t.id}
+                    style={[
+                      styles.itemRow,
+                      checked && styles.itemRowOn,
+                      idx < searchResults.length - 1 && { borderBottomWidth: 1, borderBottomColor: Colors.divider },
+                    ]}
+                    onPress={() => onToggleTask(t.id)}
+                    activeOpacity={0.7}
+                  >
+                    <Checkbox checked={checked} />
+                    {t.icon ? (
+                      <Text style={styles.itemIcon}>{t.icon}</Text>
+                    ) : null}
+                    <Text style={styles.itemName}>{t.name}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )
+        ) : (
+          groups.map((g) => {
+            const expanded = expandedIds.has(g.category.id);
+            const selectedCount = selectedCountByCategory(g.category.id);
+            return (
+              <View key={g.category.id} style={styles.accordionCard}>
+                <TouchableOpacity
+                  style={styles.accordionHeader}
+                  onPress={() => onToggleExpand(g.category.id)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.categoryEmoji}>{g.category.emoji}</Text>
+                  <Text style={styles.accordionTitle}>{g.category.name}</Text>
+                  {selectedCount > 0 ? (
+                    <View style={styles.selectedBadge}>
+                      <Text style={styles.selectedBadgeText}>
+                        {selectedCount} selected
+                      </Text>
+                    </View>
+                  ) : null}
+                  <Text style={styles.accordionChevron}>
+                    {expanded ? '▾' : '▸'}
+                  </Text>
+                </TouchableOpacity>
+                {expanded ? (
+                  <View style={styles.accordionContent}>
+                    {g.items.map((t) => {
+                      const checked = checkedIds.has(t.id);
+                      return (
+                        <TouchableOpacity
+                          key={t.id}
+                          style={[styles.itemRow, checked && styles.itemRowOn]}
+                          onPress={() => onToggleTask(t.id)}
+                          activeOpacity={0.7}
+                        >
+                          <Checkbox checked={checked} />
+                          {t.icon ? (
+                            <Text style={styles.itemIcon}>{t.icon}</Text>
+                          ) : null}
+                          <Text style={styles.itemName}>{t.name}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
                   </View>
                 ) : null}
-                <Text style={styles.accordionChevron}>
-                  {expanded ? '▾' : '▸'}
-                </Text>
-              </TouchableOpacity>
-              {expanded ? (
-                <View style={styles.accordionContent}>
-                  {g.items.map((t) => {
-                    const checked = checkedIds.has(t.id);
-                    return (
-                      <TouchableOpacity
-                        key={t.id}
-                        style={[styles.itemRow, checked && styles.itemRowOn]}
-                        onPress={() => onToggleTask(t.id)}
-                        activeOpacity={0.7}
-                      >
-                        <Checkbox checked={checked} />
-                        {t.icon ? (
-                          <Text style={styles.itemIcon}>{t.icon}</Text>
-                        ) : null}
-                        <Text style={styles.itemName}>{t.name}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              ) : null}
-            </View>
-          );
-        })}
+              </View>
+            );
+          })
+        )}
       </ScrollView>
       <View style={styles.bottomBar}>
         <TouchableOpacity
@@ -795,15 +865,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   header: {
+    height: 56,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
     backgroundColor: Colors.headerBackground,
   },
   headerSlot: {
-    width: 40,
+    minWidth: 60,
   },
   headerSlotRight: {
     alignItems: 'flex-end',
@@ -818,10 +888,10 @@ const styles = StyleSheet.create({
     color: Colors.textOnDark,
     textAlign: 'center',
   },
-  backIcon: {
-    fontSize: 28,
-    color: Colors.textOnDark,
-    fontWeight: '300',
+  backText: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
   closeText: {
     fontSize: 20,
@@ -845,6 +915,41 @@ const styles = StyleSheet.create({
   bigEmoji: {
     fontSize: 64,
     marginBottom: 16,
+  },
+  searchContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+  },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: 12,
+    height: 44,
+  },
+  searchIcon: {
+    fontSize: 14,
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: Colors.textPrimary,
+    padding: 0,
+  },
+  searchClear: {
+    fontSize: 14,
+    color: Colors.textMuted,
+    paddingLeft: 8,
+  },
+  searchEmpty: {
+    fontSize: 15,
+    color: Colors.textMuted,
+    textAlign: 'center',
+    paddingVertical: 32,
   },
   scrollContent: {
     paddingHorizontal: 16,

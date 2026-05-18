@@ -28,13 +28,28 @@ export default function LoginScreen() {
   const [submitting, setSubmitting] = useState(false);
 
   const handleSignIn = async () => {
+    if (!email.trim() || !password) {
+      setError('Please enter your email and password');
+      return;
+    }
     setError(null);
     setSubmitting(true);
     try {
       await signIn(email.trim(), password);
     } catch (e) {
-      const message = e instanceof Error ? e.message : 'Failed to sign in';
-      setError(message);
+      const err = e as { code?: string; message?: string };
+      const code = err.code ?? '';
+      if (code === 'auth/invalid-email') {
+        setError('Please enter a valid email address');
+      } else if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+        setError('Incorrect password. Please try again');
+      } else if (code === 'auth/user-not-found') {
+        setError('No account found with that email');
+      } else if (code === 'auth/too-many-requests') {
+        setError('Too many attempts. Please try again later');
+      } else {
+        setError('Something went wrong. Please try again');
+      }
     } finally {
       setSubmitting(false);
     }

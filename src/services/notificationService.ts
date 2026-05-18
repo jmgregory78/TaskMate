@@ -322,6 +322,9 @@ export async function scheduleAllTaskReminders(
     const daysBefore =
       typeof task.reminderDaysBefore === 'number' ? task.reminderDaysBefore : 1;
 
+    const taskHour = typeof task.reminderHour === 'number' ? task.reminderHour : reminderHour;
+    const taskMinute = typeof task.reminderMinute === 'number' ? task.reminderMinute : reminderMinute;
+
     if (daysBefore > 0) {
       await scheduleTaskReminder(
         task.id,
@@ -330,8 +333,8 @@ export async function scheduleAllTaskReminders(
         dueDate,
         householdId,
         daysBefore,
-        reminderHour,
-        reminderMinute
+        taskHour,
+        taskMinute
       );
     }
 
@@ -342,8 +345,8 @@ export async function scheduleAllTaskReminders(
       dueDate,
       householdId,
       0,
-      reminderHour,
-      reminderMinute
+      taskHour,
+      taskMinute
     );
   }
 }

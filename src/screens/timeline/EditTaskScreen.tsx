@@ -138,6 +138,11 @@ export default function EditTaskScreen() {
 
   const [assignee, setAssignee] = useState<Assignee | null>(null);
   const [reminderDaysBefore, setReminderDaysBefore] = useState<number | null>(1);
+  const [reminderTimeValue, setReminderTimeValue] = useState(() => {
+    const d = new Date();
+    d.setHours(9, 0, 0, 0);
+    return d;
+  });
   const [notes, setNotes] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
@@ -194,6 +199,13 @@ export default function EditTaskScreen() {
               ? t.reminderDaysBefore
               : 1
         );
+        const loadedTime = new Date();
+        loadedTime.setHours(
+          typeof t.reminderHour === 'number' ? t.reminderHour : 9,
+          typeof t.reminderMinute === 'number' ? t.reminderMinute : 0,
+          0, 0
+        );
+        setReminderTimeValue(loadedTime);
         setNotes(t.notes ?? '');
         setLoading(false);
       })
@@ -253,6 +265,8 @@ export default function EditTaskScreen() {
     if (!recurrenceEqual(buildRecurrence(), task.recurrence)) return true;
     if ((assignee?.userId ?? null) !== (task.assignedTo ?? null)) return true;
     if (reminderDaysBefore !== task.reminderDaysBefore) return true;
+    if (reminderTimeValue.getHours() !== (task.reminderHour ?? 9)) return true;
+    if (reminderTimeValue.getMinutes() !== (task.reminderMinute ?? 0)) return true;
     if (trimmedNotes !== (task.notes ?? '')) return true;
     return false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -271,6 +285,7 @@ export default function EditTaskScreen() {
     endByDate,
     assignee,
     reminderDaysBefore,
+    reminderTimeValue,
     trimmedNotes,
   ]);
 
@@ -316,6 +331,12 @@ export default function EditTaskScreen() {
       }
       if (reminderDaysBefore !== task.reminderDaysBefore) {
         changed.reminderDaysBefore = reminderDaysBefore;
+      }
+      if (reminderTimeValue.getHours() !== (task.reminderHour ?? 9)) {
+        changed.reminderHour = reminderTimeValue.getHours();
+      }
+      if (reminderTimeValue.getMinutes() !== (task.reminderMinute ?? 0)) {
+        changed.reminderMinute = reminderTimeValue.getMinutes();
       }
       if (!recurrenceEqual(newRecurrence, task.recurrence)) {
         changed.recurrence = newRecurrence;
@@ -691,6 +712,13 @@ export default function EditTaskScreen() {
             <ReminderPicker
               value={reminderDaysBefore}
               onChange={setReminderDaysBefore}
+              reminderHour={reminderTimeValue.getHours()}
+              reminderMinute={reminderTimeValue.getMinutes()}
+              onTimeChange={(hour, minute) => {
+                const d = new Date();
+                d.setHours(hour, minute, 0, 0);
+                setReminderTimeValue(d);
+              }}
             />
 
             <Text style={styles.sectionHeader}>👤 Assign To</Text>
@@ -767,7 +795,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.headerBackground,
   },
   header: {
-    height: 60,
+    height: 56,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,

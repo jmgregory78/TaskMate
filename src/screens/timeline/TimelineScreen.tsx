@@ -726,7 +726,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.headerBackground,
   },
   header: {
-    height: 60,
+    height: 56,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,

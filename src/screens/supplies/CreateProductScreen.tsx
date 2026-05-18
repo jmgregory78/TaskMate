@@ -150,7 +150,7 @@ export default function CreateProductScreen() {
       <StatusBar barStyle="light-content" />
       <ScreenHeader
         title="New Supply"
-        leftLabel="Supplies"
+        leftLabel="Back"
         rightContent={<View style={{ width: 80 }} />}
       />
       <ScreenWrapper contentContainerStyle={styles.content}>

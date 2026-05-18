@@ -46,6 +46,7 @@ import {
   ThresholdType,
 } from '../../types/models';
 import { Colors } from '../../constants/colors';
+import ReminderPicker from '../../components/ReminderPicker';
 
 // Smart defaults for threshold based on supply type
 function getSmartThresholdDefaults(supplyId: string, supplyName: string): { type: ThresholdType; value: number } {
@@ -104,6 +105,8 @@ interface TaskDraft {
   frequency: RecurrenceFrequency;
   intervalText: string;
   reminderDays: number | null;
+  reminderHour: number;
+  reminderMinute: number;
 }
 
 type SupplyPromptState =
@@ -382,6 +385,8 @@ export default function SetupWizardScreen() {
             frequency: t.frequency,
             intervalText: String(t.interval),
             reminderDays: null,
+            reminderHour: 9,
+            reminderMinute: 0,
           };
         }
       }
@@ -430,6 +435,8 @@ export default function SetupWizardScreen() {
           hasInventory: false,
           instructions: null,
           reminderDaysBefore: draft.reminderDays,
+          reminderHour: draft.reminderHour,
+          reminderMinute: draft.reminderMinute,
         },
         user.uid
       );
@@ -1080,54 +1087,6 @@ function ConfigureTaskStep({
   submitting: boolean;
   error: string | null;
 }) {
-  // Custom reminder state
-  const isCustomValue = draft.reminderDays !== null && !REMINDER_PRESET_VALUES.has(draft.reminderDays);
-  const initialCustom = isCustomValue && draft.reminderDays !== null
-    ? daysToUnitAndValue(draft.reminderDays)
-    : { value: 1, unit: 'days' as CustomReminderUnit };
-  const [showCustomInput, setShowCustomInput] = useState(isCustomValue);
-  const [customValue, setCustomValue] = useState(String(initialCustom.value));
-  const [customUnit, setCustomUnit] = useState<CustomReminderUnit>(initialCustom.unit);
-
-  const handleSelectPreset = (days: number | null) => {
-    setShowCustomInput(false);
-    onUpdateDraft({ reminderDays: days });
-  };
-
-  const handleSelectCustom = () => {
-    setShowCustomInput(true);
-    // Set a default custom value
-    const multiplier = CUSTOM_UNIT_OPTIONS.find((u) => u.key === customUnit)?.multiplier ?? 1;
-    const num = parseInt(customValue, 10) || 1;
-    onUpdateDraft({ reminderDays: num * multiplier });
-  };
-
-  const handleCustomValueChange = (text: string) => {
-    const digitsOnly = text.replace(/\D/g, '');
-    setCustomValue(digitsOnly);
-    const num = parseInt(digitsOnly, 10) || 1;
-    const multiplier = CUSTOM_UNIT_OPTIONS.find((u) => u.key === customUnit)?.multiplier ?? 1;
-    onUpdateDraft({ reminderDays: num * multiplier });
-  };
-
-  const handleUnitChange = (unit: CustomReminderUnit) => {
-    setCustomUnit(unit);
-    const num = parseInt(customValue, 10) || 1;
-    const multiplier = CUSTOM_UNIT_OPTIONS.find((u) => u.key === unit)?.multiplier ?? 1;
-    onUpdateDraft({ reminderDays: num * multiplier });
-  };
-
-  const handleConfirmCustom = () => {
-    const num = parseInt(customValue, 10) || 1;
-    const multiplier = CUSTOM_UNIT_OPTIONS.find((u) => u.key === customUnit)?.multiplier ?? 1;
-    onUpdateDraft({ reminderDays: num * multiplier });
-    setShowCustomInput(false);
-  };
-
-  const customDisplayLabel = isCustomValue && draft.reminderDays !== null
-    ? `${customReminderLabel(draft.reminderDays)} ✏️`
-    : 'Custom...';
-
   return (
     <>
       <View style={styles.titleBlock}>
@@ -1221,105 +1180,13 @@ function ConfigureTaskStep({
         </View>
 
         <Text style={styles.fieldLabel}>Advance Reminder</Text>
-        <View style={styles.reminderColumn}>
-          {REMINDER_OPTIONS.map((opt) => {
-            const active = opt.days === draft.reminderDays && !showCustomInput;
-            const key = opt.days === null ? 'none' : String(opt.days);
-            const isNoAdvanceReminder = opt.days === null;
-            return (
-              <View key={key}>
-                <TouchableOpacity
-                  style={[styles.reminderRow, active && styles.reminderRowOn]}
-                  onPress={() => handleSelectPreset(opt.days)}
-                  activeOpacity={0.7}
-                  disabled={submitting}
-                >
-                  <Text
-                    style={[
-                      styles.reminderText,
-                      active && styles.reminderTextOn,
-                    ]}
-                  >
-                    {opt.label}
-                  </Text>
-                  {active ? (
-                    <Text style={styles.reminderCheck}>✓</Text>
-                  ) : null}
-                </TouchableOpacity>
-                {isNoAdvanceReminder ? (
-                  <Text style={styles.reminderSubtitle}>
-                    You'll still get a task alert on the due date
-                  </Text>
-                ) : null}
-              </View>
-            );
-          })}
-          {/* Custom option */}
-          <TouchableOpacity
-            style={[
-              styles.reminderRow,
-              (isCustomValue || showCustomInput) && styles.reminderRowOn,
-            ]}
-            onPress={handleSelectCustom}
-            activeOpacity={0.7}
-            disabled={submitting}
-          >
-            <Text
-              style={[
-                styles.reminderText,
-                (isCustomValue || showCustomInput) && styles.reminderTextOn,
-              ]}
-            >
-              {customDisplayLabel}
-            </Text>
-          </TouchableOpacity>
-          {showCustomInput ? (
-            <View style={styles.customReminderBox}>
-              <View style={styles.customReminderRow}>
-                <TextInput
-                  style={styles.customReminderInput}
-                  value={customValue}
-                  onChangeText={handleCustomValueChange}
-                  keyboardType="number-pad"
-                  maxLength={3}
-                  selectTextOnFocus
-                  editable={!submitting}
-                />
-                <View style={styles.customUnitRow}>
-                  {CUSTOM_UNIT_OPTIONS.map((u) => {
-                    const active = customUnit === u.key;
-                    return (
-                      <TouchableOpacity
-                        key={u.key}
-                        style={[styles.customUnitChip, active && styles.customUnitChipOn]}
-                        onPress={() => handleUnitChange(u.key)}
-                        activeOpacity={0.7}
-                        disabled={submitting}
-                      >
-                        <Text
-                          style={[
-                            styles.customUnitText,
-                            active && styles.customUnitTextOn,
-                          ]}
-                        >
-                          {u.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-              <TouchableOpacity
-                style={styles.customConfirmButton}
-                onPress={handleConfirmCustom}
-                activeOpacity={0.7}
-                disabled={submitting}
-              >
-                <Text style={styles.customConfirmText}>Set Reminder</Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
-        </View>
+        <ReminderPicker
+          value={draft.reminderDays}
+          onChange={(days) => onUpdateDraft({ reminderDays: days })}
+          reminderHour={draft.reminderHour}
+          reminderMinute={draft.reminderMinute}
+          onTimeChange={(h, m) => onUpdateDraft({ reminderHour: h, reminderMinute: m })}
+        />
       </ScrollView>
       <View style={styles.bottomBar}>
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -2469,9 +2336,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
   },
   header: {
+    height: 56,
     backgroundColor: Colors.headerBackground,
     paddingHorizontal: 16,
-    paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
   },

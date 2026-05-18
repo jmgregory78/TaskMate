@@ -122,6 +122,11 @@ export default function AddTaskScreen() {
   const [reminderDaysBefore, setReminderDaysBefore] = useState<number | null>(
     prefill?.reminderDaysBefore ?? null
   );
+  const [reminderTimeValue, setReminderTimeValue] = useState(() => {
+    const d = new Date();
+    d.setHours(9, 0, 0, 0);
+    return d;
+  });
 
   const [assignee, setAssignee] = useState<Assignee | null>(() =>
     user
@@ -295,6 +300,8 @@ export default function AddTaskScreen() {
           assignedTo: assignee?.userId ?? null,
           assignedToName: assignee?.name ?? null,
           reminderDaysBefore,
+          reminderHour: reminderTimeValue.getHours(),
+          reminderMinute: reminderTimeValue.getMinutes(),
           notes: notes.trim() || undefined,
         },
         user.uid
@@ -326,7 +333,7 @@ export default function AddTaskScreen() {
   };
 
   const handleBack = () => {
-    navigation.navigate('Main', { screen: 'Tasks' });
+    navigation.goBack();
   };
 
   return (
@@ -682,6 +689,13 @@ export default function AddTaskScreen() {
       <ReminderPicker
         value={reminderDaysBefore}
         onChange={setReminderDaysBefore}
+        reminderHour={reminderTimeValue.getHours()}
+        reminderMinute={reminderTimeValue.getMinutes()}
+        onTimeChange={(hour, minute) => {
+          const d = new Date();
+          d.setHours(hour, minute, 0, 0);
+          setReminderTimeValue(d);
+        }}
       />
 
       <Text style={styles.sectionHeader}>👤 Assign To</Text>

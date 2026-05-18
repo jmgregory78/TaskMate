@@ -30,6 +30,8 @@ import { getFirstName } from '../../utils/nameUtils';
 import { formatDueDateShort } from '../../utils/dateUtils';
 import UserAvatar from '../../components/UserAvatar';
 import TaskAlertModal from '../../components/TaskAlertModal';
+import TaskTypeSheet from '../../components/TaskTypeSheet';
+import FAB from '../../components/FAB';
 import Toast from '../../components/Toast';
 import { SnoozeUnit } from '../../components/SnoozeSheet';
 import { Colors } from '../../constants/colors';
@@ -159,6 +161,16 @@ export default function HomeScreen() {
   const [urgentTasks, setUrgentTasks] = useState<Task[]>([]);
   const [showAlert, setShowAlert] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+
+  const openSuggested = () => {
+    setSheetOpen(false);
+    navigation.navigate('SuggestedTasks');
+  };
+  const openCustom = () => {
+    setSheetOpen(false);
+    navigation.navigate('AddTask');
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -404,7 +416,7 @@ export default function HomeScreen() {
         <View style={[styles.headerSide, styles.headerSideRight]}>
           <TouchableOpacity
             style={styles.addButton}
-            onPress={() => navigation.navigate('AddTask')}
+            onPress={() => setSheetOpen(true)}
             activeOpacity={0.7}
           >
             <Text style={styles.addButtonText}>+</Text>
@@ -650,14 +662,13 @@ export default function HomeScreen() {
         onDone={() => setToastMessage(null)}
       />
 
-      {/* Floating Action Button */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => navigation.navigate('AddTask')}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.fabIcon}>+</Text>
-      </TouchableOpacity>
+      <FAB onPress={() => setSheetOpen(true)} />
+      <TaskTypeSheet
+        visible={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        onSuggested={openSuggested}
+        onCustom={openCustom}
+      />
     </View>
   );
 }
@@ -681,7 +692,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.headerBackground,
   },
   header: {
-    height: 60,
+    height: 56,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
@@ -932,27 +943,5 @@ const styles = StyleSheet.create({
   seeAllText: {
     ...Typography.bodyBold,
     color: Colors.primary,
-  },
-  fab: {
-    position: 'absolute',
-    bottom: 24,
-    right: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: Colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 8,
-  },
-  fabIcon: {
-    color: '#FFFFFF',
-    fontSize: 32,
-    fontWeight: '400',
-    lineHeight: 34,
   },
 });
