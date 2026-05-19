@@ -1,19 +1,28 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Clipboard,
   Modal,
   ScrollView,
   Share,
   StyleSheet,
   Text,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import { QrCodeSvg } from 'react-native-qr-svg';
 import { Colors } from '../constants/colors';
 import { createInvite } from '../services/inviteService';
 import { HouseholdInviteRole } from '../types/models';
+
+function copyToClipboard(text: string): boolean {
+  try {
+    Clipboard.setString(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 interface Props {
   visible: boolean;
@@ -36,15 +45,30 @@ export default function InviteSheet({
   const [code, setCode] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevVisibleRef = useRef(false);
+  const generatedRef = useRef(false);
 
   useEffect(() => {
-    console.log('[InviteSheet] visible changed:', visible);
-    if (visible) {
+    // Only reset state on the false → true transition. A stable `visible=true`
+    // value across re-renders (e.g. because the parent re-rendered after
+    // onInviteCreated fired) must NOT wipe out the generated code.
+    if (visible && !prevVisibleRef.current) {
       setRole('member');
       setCode(null);
       setError(null);
       setSubmitting(false);
+      setCopied(false);
+      generatedRef.current = false;
     }
+    prevVisibleRef.current = visible;
+    return () => {
+      if (copiedTimer.current) {
+        clearTimeout(copiedTimer.current);
+        copiedTimer.current = null;
+      }
+    };
   }, [visible]);
 
   const handleGenerate = async () => {
@@ -65,7 +89,10 @@ export default function InviteSheet({
       );
       console.log('[InviteSheet] invite created:', newCode);
       setCode(newCode);
-      onInviteCreated?.();
+      // Defer onInviteCreated until the user closes the sheet — calling it
+      // here can re-render the parent, which sometimes flickers the `visible`
+      // prop and wipes the generated code.
+      generatedRef.current = true;
     } catch (e) {
       console.warn('[InviteSheet] createInvite failed:', e);
       const err = e as { message?: string };
@@ -79,7 +106,7 @@ export default function InviteSheet({
     if (!code) return;
     try {
       await Share.share({
-        message: `Join my household on TaskMate!\n\nUse invite code: ${code}\n\nDownload TaskMate and enter this code when signing up.`,
+        message: `Join my household on TaskMate! Download the app and enter this invite code: ${code}`,
         title: 'Join my TaskMate Household',
       });
     } catch (e) {
@@ -88,8 +115,33 @@ export default function InviteSheet({
     }
   };
 
+  const handleCopy = async () => {
+    if (!code) return;
+    const ok = copyToClipboard(code);
+    if (ok) {
+      setCopied(true);
+      if (copiedTimer.current) clearTimeout(copiedTimer.current);
+      copiedTimer.current = setTimeout(() => setCopied(false), 1800);
+    } else {
+      // Clipboard module isn't installed yet — open the Share sheet so the
+      // user still has a one-tap way to send the code somewhere.
+      void handleShare();
+    }
+  };
+
   const handleGenerateNew = () => {
     setCode(null);
+    setCopied(false);
+  };
+
+  const handleClose = () => {
+    // Notify the parent here (instead of immediately after generating) so the
+    // resulting re-render can't flicker `visible` and reset our state mid-flow.
+    if (generatedRef.current) {
+      generatedRef.current = false;
+      onInviteCreated?.();
+    }
+    onCancel();
   };
 
   return (
@@ -97,11 +149,9 @@ export default function InviteSheet({
       visible={visible}
       transparent
       animationType="slide"
-      onRequestClose={onCancel}
+      onRequestClose={handleClose}
     >
-      <TouchableWithoutFeedback onPress={onCancel}>
-        <View style={styles.overlay} />
-      </TouchableWithoutFeedback>
+      <View style={styles.overlay} pointerEvents="none" />
       <View style={styles.sheet}>
         <View style={styles.handle} />
         <ScrollView
@@ -151,27 +201,57 @@ export default function InviteSheet({
             </>
           ) : (
             <>
-              <View style={styles.codePill}>
-                <Text style={styles.codeText}>{code.split('').join(' ')}</Text>
+              <View style={styles.ticketCard}>
+                <Text style={styles.ticketLabel}>INVITE CODE</Text>
+                <Text style={styles.ticketCode}>{code}</Text>
+                <View style={styles.ticketDivider} />
+                <View style={styles.qrWrap}>
+                  <QrCodeSvg
+                    value={`taskmate://join/${code}`}
+                    frameSize={140}
+                  />
+                </View>
               </View>
 
-              <View style={styles.qrWrap}>
-                <QrCodeSvg
-                  value={`taskmate://join/${code}`}
-                  frameSize={200}
+              <View style={styles.instructionsCard}>
+                <Text style={styles.instructionsTitle}>
+                  How to invite a family member:
+                </Text>
+                <InstructionStep n={1} text="Share this code with them" />
+                <InstructionStep
+                  n={2}
+                  text="Ask them to download TaskMate from the App Store"
+                />
+                <InstructionStep
+                  n={3}
+                  text="They create an account and enter this code when prompted"
+                />
+                <InstructionStep
+                  n={4}
+                  text="They'll be added to your household automatically"
                 />
               </View>
+
+              <TouchableOpacity
+                style={[styles.copyButton, copied && styles.copyButtonDone]}
+                onPress={handleCopy}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.copyButtonText, copied && styles.copyButtonTextDone]}>
+                  {copied ? '✓ Copied!' : 'Copy Code'}
+                </Text>
+              </TouchableOpacity>
 
               <TouchableOpacity
                 style={styles.primaryButton}
                 onPress={handleShare}
                 activeOpacity={0.8}
               >
-                <Text style={styles.primaryButtonText}>📤 Share Invite</Text>
+                <Text style={styles.primaryButtonText}>📤 Share</Text>
               </TouchableOpacity>
 
               <Text style={styles.expiryNotice}>
-                This invite expires in 7 days
+                This code expires in 7 days
               </Text>
 
               <TouchableOpacity
@@ -185,7 +265,7 @@ export default function InviteSheet({
           )}
 
           <TouchableOpacity
-            onPress={onCancel}
+            onPress={handleClose}
             style={styles.cancelButton}
             activeOpacity={0.7}
           >
@@ -202,6 +282,17 @@ interface RoleCardProps {
   description: string;
   selected: boolean;
   onPress: () => void;
+}
+
+function InstructionStep({ n, text }: { n: number; text: string }) {
+  return (
+    <View style={styles.instructionRow}>
+      <View style={styles.instructionNumber}>
+        <Text style={styles.instructionNumberText}>{n}</Text>
+      </View>
+      <Text style={styles.instructionText}>{text}</Text>
+    </View>
+  );
 }
 
 function RoleCard({ title, description, selected, onPress }: RoleCardProps) {
@@ -312,24 +403,110 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 8,
   },
-  codePill: {
-    backgroundColor: Colors.screenBackground,
-    borderRadius: 12,
-    paddingVertical: 18,
+  ticketCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: Colors.primary,
+    paddingVertical: 22,
+    paddingHorizontal: 20,
     alignItems: 'center',
     marginTop: 8,
-    marginBottom: 16,
+    marginBottom: 20,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 4,
   },
-  codeText: {
-    fontSize: 36,
+  ticketLabel: {
+    fontSize: 11,
     fontWeight: '700',
-    letterSpacing: 8,
+    letterSpacing: 1.5,
+    color: Colors.primary,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  ticketCode: {
+    fontSize: 40,
+    fontWeight: '800',
+    letterSpacing: 6,
     color: Colors.textPrimary,
     fontVariant: ['tabular-nums'],
+    textAlign: 'center',
+  },
+  ticketDivider: {
+    alignSelf: 'stretch',
+    height: 1,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    borderStyle: 'dashed',
+    marginTop: 18,
+    marginBottom: 16,
   },
   qrWrap: {
     alignItems: 'center',
-    marginVertical: 8,
+  },
+  instructionsCard: {
+    backgroundColor: Colors.screenBackground,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  instructionsTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+    marginBottom: 12,
+  },
+  instructionRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+  },
+  instructionNumber: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+    marginTop: 1,
+  },
+  instructionNumberText: {
+    color: Colors.textOnDark,
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 14,
+  },
+  instructionText: {
+    flex: 1,
+    fontSize: 14,
+    color: Colors.textPrimary,
+    lineHeight: 20,
+  },
+  copyButton: {
+    height: 48,
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: Colors.primary,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  copyButtonDone: {
+    backgroundColor: Colors.primaryLight,
+  },
+  copyButtonText: {
+    color: Colors.primary,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  copyButtonTextDone: {
+    color: Colors.primary,
   },
   expiryNotice: {
     color: Colors.textMuted,

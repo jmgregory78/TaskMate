@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -48,6 +49,7 @@ export default function TestSuiteScreen() {
   const { user } = useAuth();
   const [running, setRunning] = useState(false);
   const [cleaning, setCleaning] = useState(false);
+  const [loadingDemo, setLoadingDemo] = useState(false);
   const [currentTest, setCurrentTest] = useState<string | null>(null);
   const [results, setResults] = useState<TestResult[]>([]);
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
@@ -113,6 +115,207 @@ export default function TestSuiteScreen() {
       }
     } finally {
       setCleaning(false);
+    }
+  };
+
+  // Load App Store demo data: wipe everything and seed a curated set.
+  const loadDemoData = async () => {
+    if (!householdId || !user?.uid) {
+      Alert.alert('Cannot load demo', 'No household or user.');
+      return;
+    }
+    setLoadingDemo(true);
+    try {
+      const userLabel =
+        user.displayName && !user.displayName.includes('@')
+          ? user.displayName
+          : 'You';
+
+      // Step 1: Delete ALL existing tasks
+      setCurrentTest('Deleting existing tasks…');
+      const tasksSnap = await getDocs(
+        collection(db, 'households', householdId, 'tasks')
+      );
+      for (const taskDoc of tasksSnap.docs) {
+        try {
+          await deleteTask(householdId, taskDoc.id);
+        } catch {
+          // best-effort
+        }
+      }
+
+      // Step 2: Delete ALL existing products
+      setCurrentTest('Deleting existing supplies…');
+      const productsSnap = await getDocs(
+        collection(db, 'households', householdId, 'products')
+      );
+      for (const prodDoc of productsSnap.docs) {
+        try {
+          await deleteProduct(householdId, prodDoc.id);
+        } catch {
+          // best-effort
+        }
+      }
+
+      // Helpers for relative dates
+      const today = new Date();
+      today.setHours(9, 0, 0, 0);
+      const daysFromNow = (n: number): Date => {
+        const d = new Date(today);
+        d.setDate(d.getDate() + n);
+        return d;
+      };
+      const monthsFromNow = (n: number): Date => {
+        const d = new Date(today);
+        d.setMonth(d.getMonth() + n);
+        return d;
+      };
+
+      type DemoTask = {
+        name: string;
+        icon: string;
+        category:
+          | 'Kitchen'
+          | 'Bathroom'
+          | 'Bedroom'
+          | 'Living Room'
+          | 'Laundry'
+          | 'Garage'
+          | 'Shed'
+          | 'Outdoor'
+          | 'Vehicles'
+          | 'Equipment'
+          | 'Other';
+        dueDate: Date;
+        frequency: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+        interval: number;
+        reminderDaysBefore: number | null;
+      };
+
+      const demoTasks: DemoTask[] = [
+        // Needs attention
+        { name: 'Replace HVAC Filter', icon: '🌬️', category: 'Equipment', dueDate: today, frequency: 'monthly', interval: 3, reminderDaysBefore: 7 },
+        // This week
+        { name: "Mom's Birthday", icon: '🎂', category: 'Other', dueDate: daysFromNow(3), frequency: 'yearly', interval: 1, reminderDaysBefore: 7 },
+        { name: 'Submit Car Registration', icon: '🚗', category: 'Vehicles', dueDate: daysFromNow(5), frequency: 'yearly', interval: 1, reminderDaysBefore: 14 },
+        // This month
+        { name: 'Clean Gutters', icon: '🍂', category: 'Outdoor', dueDate: daysFromNow(14), frequency: 'monthly', interval: 6, reminderDaysBefore: 7 },
+        { name: 'Dental Cleaning', icon: '🦷', category: 'Other', dueDate: daysFromNow(21), frequency: 'monthly', interval: 6, reminderDaysBefore: 14 },
+        // Future
+        { name: 'Hot Tub Quarterly Drain & Refill', icon: '🛁', category: 'Equipment', dueDate: monthsFromNow(2), frequency: 'monthly', interval: 3, reminderDaysBefore: 7 },
+        { name: 'Car Oil Change', icon: '🛢️', category: 'Vehicles', dueDate: monthsFromNow(3), frequency: 'monthly', interval: 6, reminderDaysBefore: 7 },
+        { name: 'Smoke Detector Test', icon: '🔋', category: 'Equipment', dueDate: monthsFromNow(4), frequency: 'yearly', interval: 1, reminderDaysBefore: 14 },
+        { name: 'Passport Renewal', icon: '🛂', category: 'Other', dueDate: monthsFromNow(8), frequency: 'yearly', interval: 10, reminderDaysBefore: 30 },
+        { name: 'Septic Tank Service', icon: '🏠', category: 'Other', dueDate: monthsFromNow(14), frequency: 'yearly', interval: 3, reminderDaysBefore: 30 },
+      ];
+
+      setCurrentTest('Creating tasks…');
+      for (const t of demoTasks) {
+        await createTask(
+          householdId,
+          userLabel,
+          {
+            householdId,
+            name: t.name,
+            category: t.category,
+            firstDueDate: t.dueDate,
+            recurrence: { frequency: t.frequency, interval: t.interval },
+            hasInventory: false,
+            instructions: null,
+            icon: t.icon,
+            reminderDaysBefore: t.reminderDaysBefore,
+            reminderHour: 9,
+            reminderMinute: 0,
+          },
+          user.uid
+        );
+      }
+
+      // Completed today: create as one-time then mark complete so it shows
+      // in the "Completed Today" section without a new occurrence being made.
+      setCurrentTest('Marking Seal Granite Counters complete…');
+      const graniteTaskId = await createTask(
+        householdId,
+        userLabel,
+        {
+          householdId,
+          name: 'Seal Granite Counters',
+          category: 'Kitchen',
+          firstDueDate: daysFromNow(-7),
+          recurrence: { frequency: 'none', interval: 1 },
+          hasInventory: false,
+          instructions: null,
+          icon: '🪨',
+          reminderDaysBefore: null,
+          reminderHour: 9,
+          reminderMinute: 0,
+        },
+        user.uid
+      );
+      await completeTask(householdId, graniteTaskId, user.uid, undefined, {
+        displayName: userLabel,
+        skipInventoryDeduction: true,
+      });
+
+      // Supplies
+      setCurrentTest('Creating supplies…');
+
+      // HVAC Filters — currentQty (1) is below threshold (2), so this renders
+      // as LOW STOCK in the UI. Seed 6 months of depletion history.
+      const hvacId = await createProduct(householdId, user.uid, {
+        householdId,
+        name: 'HVAC Filters',
+        amazonUrl: '',
+        containerUnit: 'filters',
+        currentQuantity: 1,
+        thresholdType: 'quantity',
+        thresholdValue: 2,
+      });
+      // Seed history: start with 7 filters six months ago, deplete one per
+      // month down to 1 today. Gives the chart a clean depletion slope ending
+      // at the current low-stock quantity.
+      for (let m = 6; m >= 0; m--) {
+        const date = monthsFromNow(-m);
+        const qty = 7 - (6 - m);
+        await addHistoryRecord(householdId, hvacId, {
+          date,
+          quantity: qty,
+          eventType: m === 6 ? 'purchase' : 'task_completion',
+          note: m === 6 ? 'Initial stock' : 'HVAC filter replaced',
+        });
+      }
+
+      await createProduct(householdId, user.uid, {
+        householdId,
+        name: 'Car Oil',
+        amazonUrl: '',
+        containerUnit: 'quarts',
+        currentQuantity: 4,
+        thresholdType: 'quantity',
+        thresholdValue: 1,
+      });
+
+      await createProduct(householdId, user.uid, {
+        householdId,
+        name: 'Lawn Fertilizer',
+        amazonUrl: '',
+        containerUnit: 'bags',
+        currentQuantity: 3,
+        thresholdType: 'quantity',
+        thresholdValue: 1,
+      });
+
+      setCurrentTest(null);
+      Alert.alert(
+        'Demo Data Loaded',
+        "Demo data loaded! You're ready for App Store screenshots 📱"
+      );
+    } catch (error: any) {
+      console.warn('[loadDemoData] failed:', error);
+      Alert.alert('Error', error?.message ?? 'Failed to load demo data');
+    } finally {
+      setLoadingDemo(false);
+      setCurrentTest(null);
     }
   };
 
@@ -782,7 +985,7 @@ export default function TestSuiteScreen() {
         <TouchableOpacity
           style={[styles.runButton, running && styles.runButtonDisabled]}
           onPress={runAllTests}
-          disabled={running || cleaning}
+          disabled={running || cleaning || loadingDemo}
           activeOpacity={0.8}
         >
           {running ? (
@@ -791,12 +994,26 @@ export default function TestSuiteScreen() {
             <Text style={styles.runButtonText}>Run All Tests</Text>
           )}
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.demoButton, loadingDemo && styles.runButtonDisabled]}
+          onPress={loadDemoData}
+          disabled={running || cleaning || loadingDemo}
+          activeOpacity={0.8}
+        >
+          {loadingDemo ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <Text style={styles.runButtonText}>📱 Load App Store Demo Data</Text>
+          )}
+        </TouchableOpacity>
       </View>
 
-      {running && currentTest ? (
+      {(running || loadingDemo) && currentTest ? (
         <View style={styles.progressRow}>
           <ActivityIndicator color={Colors.primary} size="small" />
-          <Text style={styles.progressText}>Running: {currentTest}</Text>
+          <Text style={styles.progressText}>
+            {loadingDemo ? currentTest : `Running: ${currentTest}`}
+          </Text>
         </View>
       ) : null}
 
@@ -925,9 +1142,16 @@ const styles = StyleSheet.create({
   },
   controlsRow: {
     padding: 16,
+    gap: 10,
   },
   runButton: {
     backgroundColor: Colors.primary,
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  demoButton: {
+    backgroundColor: '#7C3AED',
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
