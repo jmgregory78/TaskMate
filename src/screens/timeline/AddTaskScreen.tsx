@@ -40,6 +40,7 @@ import ReminderPicker from '../../components/ReminderPicker';
 import { Colors } from '../../constants/colors';
 
 const FREQUENCIES: { key: RecurrenceFrequency; label: string }[] = [
+  { key: 'none', label: 'Does not repeat' },
   { key: 'daily', label: 'Daily' },
   { key: 'weekly', label: 'Weekly' },
   { key: 'monthly', label: 'Monthly' },
@@ -59,6 +60,13 @@ const WEEK_OPTIONS: { key: MonthlyWeek; label: string }[] = [
 function parsePositiveInt(value: string, fallback: number): number {
   const n = parseInt(value, 10);
   return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+function formatReminderTime(hour: number, minute: number): string {
+  const h12 = ((hour + 11) % 12) + 1;
+  const ampm = hour < 12 ? 'AM' : 'PM';
+  const mm = minute.toString().padStart(2, '0');
+  return `${h12}:${mm} ${ampm}`;
 }
 
 type AddTaskRoute = RouteProp<
@@ -114,6 +122,7 @@ export default function AddTaskScreen() {
   const [endAfterText, setEndAfterText] = useState('10');
   const [endByDate, setEndByDate] = useState<Date>(today);
   const [showEndByPicker, setShowEndByPicker] = useState(false);
+  const [showFrequencyPicker, setShowFrequencyPicker] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -122,11 +131,9 @@ export default function AddTaskScreen() {
   const [reminderDaysBefore, setReminderDaysBefore] = useState<number | null>(
     prefill?.reminderDaysBefore ?? null
   );
-  const [reminderTimeValue, setReminderTimeValue] = useState(() => {
-    const d = new Date();
-    d.setHours(9, 0, 0, 0);
-    return d;
-  });
+  const [reminderHour, setReminderHour] = useState(9);
+  const [reminderMinute, setReminderMinute] = useState(0);
+  const [showTimePicker, setShowTimePicker] = useState(false);
 
   const [assignee, setAssignee] = useState<Assignee | null>(() =>
     user
@@ -300,8 +307,8 @@ export default function AddTaskScreen() {
           assignedTo: assignee?.userId ?? null,
           assignedToName: assignee?.name ?? null,
           reminderDaysBefore,
-          reminderHour: reminderTimeValue.getHours(),
-          reminderMinute: reminderTimeValue.getMinutes(),
+          reminderHour,
+          reminderMinute,
           notes: notes.trim() || undefined,
         },
         user.uid
@@ -410,16 +417,15 @@ export default function AddTaskScreen() {
       )}
 
       <Text style={styles.sectionHeader}>Recurrence pattern</Text>
-      <View style={styles.radioGroup}>
-        {FREQUENCIES.map((f) => (
-          <RadioRow
-            key={f.key}
-            label={f.label}
-            selected={frequency === f.key}
-            onPress={() => setFrequency(f.key)}
-          />
-        ))}
-      </View>
+      <TouchableOpacity
+        style={styles.dateButton}
+        onPress={() => setShowFrequencyPicker(true)}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.dateButtonText}>
+          {FREQUENCIES.find((f) => f.key === frequency)?.label ?? 'Monthly'}
+        </Text>
+      </TouchableOpacity>
 
       {frequency === 'daily' && (
         <View style={styles.contextBox}>
@@ -551,6 +557,8 @@ export default function AddTaskScreen() {
         </View>
       )}
 
+      {frequency !== 'none' ? (
+      <>
       <Text style={styles.sectionHeader}>Range of recurrence</Text>
       <View style={styles.contextBox}>
         <View style={styles.row}>
@@ -616,6 +624,8 @@ export default function AddTaskScreen() {
           />
         )}
       </View>
+      </>
+      ) : null}
 
       <Text style={styles.sectionHeader}>🧴 Supplies Needed</Text>
       <Text style={styles.suppliesHint}>
@@ -685,17 +695,56 @@ export default function AddTaskScreen() {
         </View>
       )}
 
+      <Text style={styles.sectionHeader}>🕐 Reminder Time</Text>
+      <Text style={styles.suppliesHint}>
+        What time should your due date notification arrive?
+      </Text>
+      <TouchableOpacity
+        style={styles.dateButton}
+        onPress={() => setShowTimePicker(true)}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.dateButtonText}>
+          {formatReminderTime(reminderHour, reminderMinute)}
+        </Text>
+      </TouchableOpacity>
+      {showTimePicker && (
+        <>
+          <DateTimePicker
+            value={(() => {
+              const d = new Date();
+              d.setHours(reminderHour, reminderMinute, 0, 0);
+              return d;
+            })()}
+            mode="time"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={(event, selected) => {
+              // iOS spinner fires onChange on every wheel tick — don't close
+              // the picker here. Android's native dialog dismisses itself, so
+              // sync our state in that case.
+              if (Platform.OS === 'android') setShowTimePicker(false);
+              if (selected) {
+                setReminderHour(selected.getHours());
+                setReminderMinute(selected.getMinutes());
+              }
+            }}
+          />
+          {Platform.OS === 'ios' && (
+            <TouchableOpacity
+              style={styles.timePickerDoneButton}
+              onPress={() => setShowTimePicker(false)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.timePickerDoneText}>Done</Text>
+            </TouchableOpacity>
+          )}
+        </>
+      )}
+
       <Text style={styles.sectionHeader}>🔔 Advance Reminder</Text>
       <ReminderPicker
         value={reminderDaysBefore}
         onChange={setReminderDaysBefore}
-        reminderHour={reminderTimeValue.getHours()}
-        reminderMinute={reminderTimeValue.getMinutes()}
-        onTimeChange={(hour, minute) => {
-          const d = new Date();
-          d.setHours(hour, minute, 0, 0);
-          setReminderTimeValue(d);
-        }}
       />
 
       <Text style={styles.sectionHeader}>👤 Assign To</Text>
@@ -741,6 +790,47 @@ export default function AddTaskScreen() {
         <Text style={styles.cancelText}>Cancel</Text>
       </TouchableOpacity>
       </ScreenWrapper>
+
+      <Modal
+        visible={showFrequencyPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowFrequencyPicker(false)}
+      >
+        <TouchableOpacity
+          style={styles.frequencyOverlay}
+          activeOpacity={1}
+          onPress={() => setShowFrequencyPicker(false)}
+        >
+          <View style={styles.frequencyModal}>
+            <Text style={styles.frequencyModalTitle}>Recurrence pattern</Text>
+            {FREQUENCIES.map((f) => {
+              const selected = frequency === f.key;
+              return (
+                <TouchableOpacity
+                  key={f.key}
+                  style={[styles.frequencyOption, selected && styles.frequencyOptionSelected]}
+                  onPress={() => {
+                    setFrequency(f.key);
+                    setShowFrequencyPicker(false);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.frequencyOptionText,
+                      selected && styles.frequencyOptionTextSelected,
+                    ]}
+                  >
+                    {f.label}
+                  </Text>
+                  {selected ? <Text style={styles.frequencyCheck}>✓</Text> : null}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       <Modal
         visible={showSupplyPrompt}
@@ -1194,6 +1284,65 @@ const styles = StyleSheet.create({
   cancelText: {
     color: '#6B7280',
     fontSize: 16,
+  },
+  timePickerDoneButton: {
+    alignSelf: 'flex-end',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginTop: 4,
+  },
+  timePickerDoneText: {
+    color: Colors.primary,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  frequencyOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  frequencyModal: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 340,
+    paddingVertical: 16,
+    overflow: 'hidden',
+  },
+  frequencyModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+    textAlign: 'center',
+    paddingBottom: 12,
+    marginBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.divider,
+  },
+  frequencyOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+  },
+  frequencyOptionSelected: {
+    backgroundColor: Colors.primaryLight,
+  },
+  frequencyOptionText: {
+    fontSize: 16,
+    color: Colors.textPrimary,
+  },
+  frequencyOptionTextSelected: {
+    color: Colors.primary,
+    fontWeight: '600',
+  },
+  frequencyCheck: {
+    fontSize: 18,
+    color: Colors.primary,
+    fontWeight: '700',
   },
   supplyPromptOverlay: {
     flex: 1,

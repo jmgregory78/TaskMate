@@ -63,7 +63,7 @@ export const TASK_CATEGORIES: TaskCategory[] = [
   'Other',
 ];
 
-export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly' | 'yearly';
+export type RecurrenceFrequency = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
 
 export type MonthlyWeek = 'first' | 'second' | 'third' | 'fourth' | 'last';
 

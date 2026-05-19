@@ -413,15 +413,7 @@ export default function HomeScreen() {
           <UserAvatar />
         </View>
         <Text style={styles.headerTitle}>TaskMate</Text>
-        <View style={[styles.headerSide, styles.headerSideRight]}>
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => setSheetOpen(true)}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.addButtonText}>+</Text>
-          </TouchableOpacity>
-        </View>
+        <View style={[styles.headerSide, styles.headerSideRight]} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
@@ -705,20 +697,6 @@ const styles = StyleSheet.create({
   },
   headerSideRight: {
     justifyContent: 'flex-end',
-  },
-  addButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  addButtonText: {
-    color: '#FFFFFF',
-    fontSize: 22,
-    fontWeight: '600',
-    lineHeight: 24,
   },
   headerTitle: {
     flex: 1,

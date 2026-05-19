@@ -359,7 +359,7 @@ export default function SuggestedSuppliesScreen() {
           <Header
             showBack={true}
             onBack={handleClose}
-            showClose={true}
+            showClose={false}
             onClose={handleClose}
           />
           <View style={[styles.center, styles.padded]}>
@@ -394,7 +394,7 @@ export default function SuggestedSuppliesScreen() {
         <Header
           showBack={true}
           onBack={inConfigQueue ? handleConfigureBack : handleClose}
-          showClose={!inConfigQueue}
+          showClose={false}
           onClose={handleClose}
         />
         {inConfigQueue && configIndex !== null ? (

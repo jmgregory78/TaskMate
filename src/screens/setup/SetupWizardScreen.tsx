@@ -217,6 +217,13 @@ function parsePositiveInt(value: string, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+function formatReminderTime(hour: number, minute: number): string {
+  const h12 = ((hour + 11) % 12) + 1;
+  const ampm = hour < 12 ? 'AM' : 'PM';
+  const mm = minute.toString().padStart(2, '0');
+  return `${h12}:${mm} ${ampm}`;
+}
+
 export default function SetupWizardScreen() {
   const route = useRoute<SetupWizardRoute>();
   const navigation = useNavigation<any>();
@@ -1087,6 +1094,7 @@ function ConfigureTaskStep({
   submitting: boolean;
   error: string | null;
 }) {
+  const [showTimePicker, setShowTimePicker] = useState(false);
   return (
     <>
       <View style={styles.titleBlock}>
@@ -1179,13 +1187,46 @@ function ConfigureTaskStep({
           </Text>
         </View>
 
+        <Text style={styles.fieldLabel}>🕐 Reminder Time</Text>
+        <Text style={styles.reminderTimeHint}>
+          What time should your due date notification arrive?
+        </Text>
+        <TouchableOpacity
+          style={styles.dateRow}
+          onPress={() => setShowTimePicker(true)}
+          activeOpacity={0.7}
+          disabled={submitting}
+        >
+          <Text style={styles.dateText}>
+            {formatReminderTime(draft.reminderHour, draft.reminderMinute)}
+          </Text>
+          <Text style={styles.chevron}>›</Text>
+        </TouchableOpacity>
+        {showTimePicker && (
+          <DateTimePicker
+            value={(() => {
+              const d = new Date();
+              d.setHours(draft.reminderHour, draft.reminderMinute, 0, 0);
+              return d;
+            })()}
+            mode="time"
+            display="spinner"
+            onChange={(event, selected) => {
+              setShowTimePicker(false);
+              if (selected) {
+                onUpdateDraft({
+                  reminderHour: selected.getHours(),
+                  reminderMinute: selected.getMinutes(),
+                });
+              }
+            }}
+          />
+        )}
+
         <Text style={styles.fieldLabel}>Advance Reminder</Text>
         <ReminderPicker
           value={draft.reminderDays}
           onChange={(days) => onUpdateDraft({ reminderDays: days })}
-          reminderHour={draft.reminderHour}
-          reminderMinute={draft.reminderMinute}
-          onTimeChange={(h, m) => onUpdateDraft({ reminderHour: h, reminderMinute: m })}
         />
       </ScrollView>
       <View style={styles.bottomBar}>
@@ -2643,6 +2684,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderWidth: 1,
     borderColor: Colors.border,
+  },
+  reminderTimeHint: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginTop: -4,
+    marginBottom: 8,
+    lineHeight: 18,
   },
   dateText: {
     flex: 1,

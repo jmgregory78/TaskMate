@@ -57,6 +57,9 @@ interface SupplyRow {
 function recurrenceToDays(task: Task): number {
   const i = Math.max(1, task.recurrence.interval);
   switch (task.recurrence.frequency) {
+    case 'none':
+      // One-time task: treat as no recurring depletion
+      return Infinity;
     case 'daily':
       return i * 1;
     case 'weekly':

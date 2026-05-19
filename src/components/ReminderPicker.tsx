@@ -1,29 +1,17 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Modal,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { Colors } from '../constants/colors';
 
 interface Props {
   value: number | null;
   onChange: (next: number | null) => void;
-  reminderHour?: number;
-  reminderMinute?: number;
-  onTimeChange?: (hour: number, minute: number) => void;
-}
-
-function formatReminderTime(hour: number, minute: number): string {
-  const h12 = ((hour + 11) % 12) + 1;
-  const ampm = hour < 12 ? 'AM' : 'PM';
-  const mm = minute.toString().padStart(2, '0');
-  return `${h12}:${mm} ${ampm}`;
 }
 
 interface Option {
@@ -78,25 +66,12 @@ function isNonPresetValue(value: number | null): boolean {
   return value !== null && !PRESET_VALUES.has(value);
 }
 
-export default function ReminderPicker({
-  value,
-  onChange,
-  reminderHour = 9,
-  reminderMinute = 0,
-  onTimeChange,
-}: Props) {
+export default function ReminderPicker({ value, onChange }: Props) {
   const [showDropdown, setShowDropdown] = useState(false);
   // Track if user has explicitly selected Custom mode
   const [isCustomMode, setIsCustomMode] = useState(() => isNonPresetValue(value));
   const [showNumberPicker, setShowNumberPicker] = useState(false);
   const [showUnitPicker, setShowUnitPicker] = useState(false);
-  const [showTimePicker, setShowTimePicker] = useState(false);
-
-  const timeValue = useMemo(() => {
-    const d = new Date();
-    d.setHours(reminderHour, reminderMinute, 0, 0);
-    return d;
-  }, [reminderHour, reminderMinute]);
 
   // Initialize custom values from current value
   const initialCustom = value !== null && value > 0 ? daysToUnitAndValue(value) : { value: 1, unit: 'days' as CustomUnit };
@@ -190,35 +165,6 @@ export default function ReminderPicker({
       <Text style={styles.explanatoryText}>
         This sends an early heads-up so you have time to prepare. You'll always get an alert on the due date regardless.
       </Text>
-
-      {value !== null && onTimeChange ? (
-        <View style={styles.timeFieldContainer}>
-          <Text style={styles.timeFieldLabel}>Reminder Time</Text>
-          <TouchableOpacity
-            onPress={() => setShowTimePicker(true)}
-            style={styles.timeFieldButton}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.timeFieldText}>
-              {formatReminderTime(reminderHour, reminderMinute)}
-            </Text>
-            <Text style={styles.timeFieldArrow}>›</Text>
-          </TouchableOpacity>
-          {showTimePicker && (
-            <DateTimePicker
-              value={timeValue}
-              mode="time"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={(event, selected) => {
-                if (Platform.OS === 'android') setShowTimePicker(false);
-                if (selected) {
-                  onTimeChange(selected.getHours(), selected.getMinutes());
-                }
-              }}
-            />
-          )}
-        </View>
-      ) : null}
 
       {/* Main Dropdown Modal */}
       <Modal
@@ -389,34 +335,6 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     marginTop: 6,
     textAlign: 'center',
-  },
-  timeFieldContainer: {
-    marginTop: 12,
-  },
-  timeFieldLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-    marginBottom: 6,
-  },
-  timeFieldButton: {
-    backgroundColor: Colors.cardBackground,
-    padding: 14,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  timeFieldText: {
-    fontSize: 16,
-    color: Colors.textPrimary,
-    fontWeight: '500',
-  },
-  timeFieldArrow: {
-    fontSize: 20,
-    color: Colors.textMuted,
   },
   modalOverlay: {
     flex: 1,

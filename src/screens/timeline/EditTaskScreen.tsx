@@ -77,6 +77,13 @@ function parsePositiveInt(value: string, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+function formatReminderTime(hour: number, minute: number): string {
+  const h12 = ((hour + 11) % 12) + 1;
+  const ampm = hour < 12 ? 'AM' : 'PM';
+  const mm = minute.toString().padStart(2, '0');
+  return `${h12}:${mm} ${ampm}`;
+}
+
 function sameDay(a: Date, b: Date): boolean {
   return (
     a.getFullYear() === b.getFullYear() &&
@@ -138,11 +145,9 @@ export default function EditTaskScreen() {
 
   const [assignee, setAssignee] = useState<Assignee | null>(null);
   const [reminderDaysBefore, setReminderDaysBefore] = useState<number | null>(1);
-  const [reminderTimeValue, setReminderTimeValue] = useState(() => {
-    const d = new Date();
-    d.setHours(9, 0, 0, 0);
-    return d;
-  });
+  const [reminderHour, setReminderHour] = useState(9);
+  const [reminderMinute, setReminderMinute] = useState(0);
+  const [showTimePicker, setShowTimePicker] = useState(false);
   const [notes, setNotes] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
@@ -199,13 +204,8 @@ export default function EditTaskScreen() {
               ? t.reminderDaysBefore
               : 1
         );
-        const loadedTime = new Date();
-        loadedTime.setHours(
-          typeof t.reminderHour === 'number' ? t.reminderHour : 9,
-          typeof t.reminderMinute === 'number' ? t.reminderMinute : 0,
-          0, 0
-        );
-        setReminderTimeValue(loadedTime);
+        setReminderHour(typeof t.reminderHour === 'number' ? t.reminderHour : 9);
+        setReminderMinute(typeof t.reminderMinute === 'number' ? t.reminderMinute : 0);
         setNotes(t.notes ?? '');
         setLoading(false);
       })
@@ -265,8 +265,8 @@ export default function EditTaskScreen() {
     if (!recurrenceEqual(buildRecurrence(), task.recurrence)) return true;
     if ((assignee?.userId ?? null) !== (task.assignedTo ?? null)) return true;
     if (reminderDaysBefore !== task.reminderDaysBefore) return true;
-    if (reminderTimeValue.getHours() !== (task.reminderHour ?? 9)) return true;
-    if (reminderTimeValue.getMinutes() !== (task.reminderMinute ?? 0)) return true;
+    if (reminderHour !== (task.reminderHour ?? 9)) return true;
+    if (reminderMinute !== (task.reminderMinute ?? 0)) return true;
     if (trimmedNotes !== (task.notes ?? '')) return true;
     return false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -285,7 +285,8 @@ export default function EditTaskScreen() {
     endByDate,
     assignee,
     reminderDaysBefore,
-    reminderTimeValue,
+    reminderHour,
+    reminderMinute,
     trimmedNotes,
   ]);
 
@@ -332,11 +333,11 @@ export default function EditTaskScreen() {
       if (reminderDaysBefore !== task.reminderDaysBefore) {
         changed.reminderDaysBefore = reminderDaysBefore;
       }
-      if (reminderTimeValue.getHours() !== (task.reminderHour ?? 9)) {
-        changed.reminderHour = reminderTimeValue.getHours();
+      if (reminderHour !== (task.reminderHour ?? 9)) {
+        changed.reminderHour = reminderHour;
       }
-      if (reminderTimeValue.getMinutes() !== (task.reminderMinute ?? 0)) {
-        changed.reminderMinute = reminderTimeValue.getMinutes();
+      if (reminderMinute !== (task.reminderMinute ?? 0)) {
+        changed.reminderMinute = reminderMinute;
       }
       if (!recurrenceEqual(newRecurrence, task.recurrence)) {
         changed.recurrence = newRecurrence;
@@ -447,6 +448,7 @@ export default function EditTaskScreen() {
           rightLabel={submitting ? '...' : 'Save'}
           rightDisabled={!canSave}
           onRightPress={handleSave}
+          rightTone="white"
         />
 
       <KeyboardAvoidingView
@@ -708,17 +710,55 @@ export default function EditTaskScreen() {
               )}
             </View>
 
+            <Text style={styles.sectionHeader}>🕐 Reminder Time</Text>
+            <Text style={styles.suppliesHint}>
+              What time should your due date notification arrive?
+            </Text>
+            <TouchableOpacity
+              style={styles.dateButton}
+              onPress={() => setShowTimePicker(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.dateButtonText}>
+                {formatReminderTime(reminderHour, reminderMinute)}
+              </Text>
+            </TouchableOpacity>
+            {showTimePicker && (
+              <>
+                <DateTimePicker
+                  value={(() => {
+                    const d = new Date();
+                    d.setHours(reminderHour, reminderMinute, 0, 0);
+                    return d;
+                  })()}
+                  mode="time"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={(event, selected) => {
+                    // iOS spinner fires onChange per wheel tick — don't close
+                    // the picker here. Android's dialog dismisses itself.
+                    if (Platform.OS === 'android') setShowTimePicker(false);
+                    if (selected) {
+                      setReminderHour(selected.getHours());
+                      setReminderMinute(selected.getMinutes());
+                    }
+                  }}
+                />
+                {Platform.OS === 'ios' && (
+                  <TouchableOpacity
+                    style={styles.timePickerDoneButton}
+                    onPress={() => setShowTimePicker(false)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.timePickerDoneText}>Done</Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
+
             <Text style={styles.sectionHeader}>🔔 Remind me</Text>
             <ReminderPicker
               value={reminderDaysBefore}
               onChange={setReminderDaysBefore}
-              reminderHour={reminderTimeValue.getHours()}
-              reminderMinute={reminderTimeValue.getMinutes()}
-              onTimeChange={(hour, minute) => {
-                const d = new Date();
-                d.setHours(hour, minute, 0, 0);
-                setReminderTimeValue(d);
-              }}
             />
 
             <Text style={styles.sectionHeader}>👤 Assign To</Text>
@@ -1034,6 +1074,23 @@ const styles = StyleSheet.create({
     marginTop: 16,
     textAlign: 'center',
     fontSize: 14,
+  },
+  suppliesHint: {
+    color: Colors.textMuted,
+    fontSize: 12,
+    marginTop: -4,
+    marginBottom: 8,
+  },
+  timePickerDoneButton: {
+    alignSelf: 'flex-end',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginTop: 4,
+  },
+  timePickerDoneText: {
+    color: Colors.primary,
+    fontSize: 16,
+    fontWeight: '700',
   },
   notesCard: {
     backgroundColor: Colors.cardBackground,

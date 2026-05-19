@@ -171,11 +171,13 @@ export async function createTask(
   data: CreateTaskInput,
   creatorUid?: string
 ): Promise<string> {
-  let icon = '📋';
-  try {
-    icon = await suggestTaskIcon(data.name);
-  } catch {
-    // fallback to default icon
+  let icon = data.icon ?? '📋';
+  if (!data.icon) {
+    try {
+      icon = await suggestTaskIcon(data.name);
+    } catch {
+      // fallback to default icon
+    }
   }
   // assignedTo === undefined means "not provided" — default to creator.
   // assignedTo === null means "explicitly unassigned" — leave null.
@@ -396,15 +398,19 @@ export async function completeTask(
 
   const completedAt = new Date();
 
+  // One-time task: no recurrence, no next occurrence will be created.
+  const isOneTime =
+    !task.recurrence ||
+    !task.recurrence.frequency ||
+    task.recurrence.frequency === 'none';
+
   // Safely compute next due date with fallback
   let nextDueDate: Date;
   try {
-    // Check if recurrence exists and is valid
-    if (!task.recurrence || !task.recurrence.frequency) {
-      console.log('[completeTask] No valid recurrence, using 30 days default');
-      // One-time or invalid task: default to 30 days from now
-      nextDueDate = new Date(completedAt);
-      nextDueDate.setDate(nextDueDate.getDate() + 30);
+    if (isOneTime) {
+      console.log('[completeTask] One-time task; no next due date will be created');
+      // Placeholder — not written to a new occurrence since we won't create one.
+      nextDueDate = completedAt;
     } else {
       console.log('[completeTask] Computing next due date with recurrence:', task.recurrence);
       nextDueDate = computeNextDueDate(completedAt, task.recurrence);
@@ -427,10 +433,11 @@ export async function completeTask(
   const newCompletedOccurrences = (task.completedOccurrences ?? 0) + 1;
 
   // Check end conditions
-  let taskEnded = false;
+  // One-time tasks are always ended after completion.
+  let taskEnded = isOneTime;
   const endType = task.recurrence?.endType;
 
-  if (endType === 'afterOccurrences') {
+  if (!isOneTime && endType === 'afterOccurrences') {
     const maxOccurrences = task.recurrence?.endAfterOccurrences ?? 0;
     if (maxOccurrences > 0 && newCompletedOccurrences >= maxOccurrences) {
       taskEnded = true;
@@ -438,7 +445,7 @@ export async function completeTask(
     }
   }
 
-  if (endType === 'byDate') {
+  if (!isOneTime && endType === 'byDate') {
     const endByDate = task.recurrence?.endByDate;
     if (endByDate && nextDueDate > endByDate) {
       taskEnded = true;

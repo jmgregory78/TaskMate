@@ -50,9 +50,12 @@ interface TaskDraft {
   frequency: RecurrenceFrequency;
   intervalText: string;
   reminderDays: number | null;
+  reminderHour: number;
+  reminderMinute: number;
 }
 
 const FREQUENCY_OPTIONS: { key: RecurrenceFrequency; label: string }[] = [
+  { key: 'none', label: 'Does not repeat' },
   { key: 'daily', label: 'Daily' },
   { key: 'weekly', label: 'Weekly' },
   { key: 'monthly', label: 'Monthly' },
@@ -67,6 +70,13 @@ function normalize(name: string): string {
 function parsePositiveInt(value: string, fallback: number): number {
   const n = parseInt(value, 10);
   return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+function formatReminderTime(hour: number, minute: number): string {
+  const h12 = ((hour + 11) % 12) + 1;
+  const ampm = hour < 12 ? 'AM' : 'PM';
+  const mm = minute.toString().padStart(2, '0');
+  return `${h12}:${mm} ${ampm}`;
 }
 
 function unitWord(frequency: RecurrenceFrequency, interval: number): string {
@@ -97,6 +107,7 @@ export default function SuggestedTasksScreen() {
   const [taskQueue, setTaskQueue] = useState<SuggestedTask[]>([]);
   const [drafts, setDrafts] = useState<Record<string, TaskDraft>>({});
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [addedTaskCount, setAddedTaskCount] = useState(0);
@@ -207,6 +218,8 @@ export default function SuggestedTasksScreen() {
             frequency: t.frequency,
             intervalText: String(t.interval),
             reminderDays: null,
+            reminderHour: 9,
+            reminderMinute: 0,
           };
         }
       }
@@ -215,10 +228,12 @@ export default function SuggestedTasksScreen() {
     setTaskQueue(checkedTasks);
     setConfigIndex(0);
     setShowDatePicker(false);
+    setShowTimePicker(false);
   };
 
   const advanceConfigQueue = (nextIndex: number) => {
     setShowDatePicker(false);
+    setShowTimePicker(false);
     if (nextIndex >= taskQueue.length) {
       // Queue done - check if there are any linked supplies to prompt about
       const linkedSupplies = getLinkedSuppliesForTasks(addedTaskIds);
@@ -277,7 +292,10 @@ export default function SuggestedTasksScreen() {
           },
           hasInventory: false,
           instructions: null,
+          icon: task.icon,
           reminderDaysBefore: draft.reminderDays,
+          reminderHour: draft.reminderHour,
+          reminderMinute: draft.reminderMinute,
         },
         user.uid
       );
@@ -302,6 +320,7 @@ export default function SuggestedTasksScreen() {
     if (configIndex === null) return;
     setSubmitError(null);
     setShowDatePicker(false);
+    setShowTimePicker(false);
     if (configIndex === 0) {
       // Return to accordion selection
       setConfigIndex(null);
@@ -323,6 +342,25 @@ export default function SuggestedTasksScreen() {
     if (event.type === 'set' && selected && configIndex !== null) {
       const taskId = taskQueue[configIndex]?.id;
       if (taskId) updateDraft(taskId, { firstDue: selected });
+    }
+  };
+
+  const onChangeFirstTime = (
+    event: DateTimePickerEvent,
+    selected: Date | undefined
+  ) => {
+    // iOS spinner fires onChange per wheel tick — keep the picker open and
+    // let the user dismiss it via the Done button. Android's dialog dismisses
+    // itself, so sync our state in that case.
+    if (Platform.OS === 'android') setShowTimePicker(false);
+    if (selected && configIndex !== null) {
+      const taskId = taskQueue[configIndex]?.id;
+      if (taskId) {
+        updateDraft(taskId, {
+          reminderHour: selected.getHours(),
+          reminderMinute: selected.getMinutes(),
+        });
+      }
     }
   };
 
@@ -350,7 +388,7 @@ export default function SuggestedTasksScreen() {
           <Header
             showBack={true}
             onBack={handleClose}
-            showClose={true}
+            showClose={false}
             onClose={handleClose}
           />
           <View style={[styles.center, styles.padded]}>
@@ -385,7 +423,7 @@ export default function SuggestedTasksScreen() {
         <Header
           showBack={true}
           onBack={inConfigQueue ? handleConfigureBack : handleClose}
-          showClose={!inConfigQueue}
+          showClose={false}
           onClose={handleClose}
         />
         {inConfigQueue && configIndex !== null && drafts[taskQueue[configIndex]?.id] ? (
@@ -400,6 +438,10 @@ export default function SuggestedTasksScreen() {
             showDatePicker={showDatePicker}
             onPressDate={() => setShowDatePicker(true)}
             onChangeDate={onChangeFirstDue}
+            showTimePicker={showTimePicker}
+            onPressTime={() => setShowTimePicker(true)}
+            onChangeTime={onChangeFirstTime}
+            onDismissTime={() => setShowTimePicker(false)}
             onSave={handleConfigureSave}
             onSkip={handleConfigureSkip}
             submitting={submitting}
@@ -703,6 +745,10 @@ function ConfigureTaskStep({
   showDatePicker,
   onPressDate,
   onChangeDate,
+  showTimePicker,
+  onPressTime,
+  onChangeTime,
+  onDismissTime,
   onSave,
   onSkip,
   submitting,
@@ -716,11 +762,16 @@ function ConfigureTaskStep({
   showDatePicker: boolean;
   onPressDate: () => void;
   onChangeDate: (e: DateTimePickerEvent, d: Date | undefined) => void;
+  showTimePicker: boolean;
+  onPressTime: () => void;
+  onChangeTime: (e: DateTimePickerEvent, d: Date | undefined) => void;
+  onDismissTime: () => void;
   onSave: () => void;
   onSkip: () => void;
   submitting: boolean;
   error: string | null;
 }) {
+  const [showFrequencyPicker, setShowFrequencyPicker] = useState(false);
   return (
     <>
       <View style={styles.titleBlock}>
@@ -773,43 +824,72 @@ function ConfigureTaskStep({
         ) : null}
 
         <Text style={styles.fieldLabel}>How often does it repeat?</Text>
-        <View style={styles.frequencyRow}>
-          {FREQUENCY_OPTIONS.map((opt) => {
-            const active = opt.key === draft.frequency;
-            return (
-              <TouchableOpacity
-                key={opt.key}
-                style={[styles.freqChip, active && styles.freqChipOn]}
-                onPress={() => onUpdateDraft({ frequency: opt.key })}
-                activeOpacity={0.7}
-                disabled={submitting}
-              >
-                <Text
-                  style={[
-                    styles.freqChipText,
-                    active && styles.freqChipTextOn,
-                  ]}
-                >
-                  {opt.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-        <View style={styles.intervalRow}>
-          <Text style={styles.intervalEvery}>Every</Text>
-          <TextInput
-            style={styles.intervalInput}
-            value={draft.intervalText}
-            onChangeText={(intervalText) => onUpdateDraft({ intervalText })}
-            keyboardType="number-pad"
-            editable={!submitting}
-            selectTextOnFocus
-          />
-          <Text style={styles.intervalUnit}>
-            {unitWord(draft.frequency, parsePositiveInt(draft.intervalText, 1))}
+        <TouchableOpacity
+          style={styles.dateRow}
+          onPress={() => setShowFrequencyPicker(true)}
+          activeOpacity={0.7}
+          disabled={submitting}
+        >
+          <Text style={styles.dateText}>
+            {FREQUENCY_OPTIONS.find((o) => o.key === draft.frequency)?.label ?? 'Monthly'}
           </Text>
-        </View>
+          <Text style={styles.chevron}>›</Text>
+        </TouchableOpacity>
+        {draft.frequency !== 'none' ? (
+          <View style={styles.intervalRow}>
+            <Text style={styles.intervalEvery}>Every</Text>
+            <TextInput
+              style={styles.intervalInput}
+              value={draft.intervalText}
+              onChangeText={(intervalText) => onUpdateDraft({ intervalText })}
+              keyboardType="number-pad"
+              editable={!submitting}
+              selectTextOnFocus
+            />
+            <Text style={styles.intervalUnit}>
+              {unitWord(draft.frequency, parsePositiveInt(draft.intervalText, 1))}
+            </Text>
+          </View>
+        ) : null}
+
+        <Text style={styles.fieldLabel}>🕐 Reminder Time</Text>
+        <Text style={styles.reminderTimeHint}>
+          What time should your due date notification arrive?
+        </Text>
+        <TouchableOpacity
+          style={styles.dateRow}
+          onPress={onPressTime}
+          activeOpacity={0.7}
+          disabled={submitting}
+        >
+          <Text style={styles.dateText}>
+            {formatReminderTime(draft.reminderHour, draft.reminderMinute)}
+          </Text>
+          <Text style={styles.chevron}>›</Text>
+        </TouchableOpacity>
+        {showTimePicker ? (
+          <>
+            <DateTimePicker
+              value={(() => {
+                const d = new Date();
+                d.setHours(draft.reminderHour, draft.reminderMinute, 0, 0);
+                return d;
+              })()}
+              mode="time"
+              display="spinner"
+              onChange={onChangeTime}
+            />
+            {Platform.OS === 'ios' && (
+              <TouchableOpacity
+                style={styles.timePickerDoneButton}
+                onPress={onDismissTime}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.timePickerDoneText}>Done</Text>
+              </TouchableOpacity>
+            )}
+          </>
+        ) : null}
 
         <Text style={styles.fieldLabel}>Advance Reminder</Text>
         <ReminderPicker
@@ -842,6 +922,50 @@ function ConfigureTaskStep({
           </Text>
         </TouchableOpacity>
       </View>
+
+      <Modal
+        visible={showFrequencyPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowFrequencyPicker(false)}
+      >
+        <TouchableOpacity
+          style={styles.frequencyOverlay}
+          activeOpacity={1}
+          onPress={() => setShowFrequencyPicker(false)}
+        >
+          <View style={styles.frequencyModal}>
+            <Text style={styles.frequencyModalTitle}>Recurrence pattern</Text>
+            {FREQUENCY_OPTIONS.map((opt) => {
+              const selected = opt.key === draft.frequency;
+              return (
+                <TouchableOpacity
+                  key={opt.key}
+                  style={[
+                    styles.frequencyOption,
+                    selected && styles.frequencyOptionSelected,
+                  ]}
+                  onPress={() => {
+                    onUpdateDraft({ frequency: opt.key });
+                    setShowFrequencyPicker(false);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.frequencyOptionText,
+                      selected && styles.frequencyOptionTextSelected,
+                    ]}
+                  >
+                    {opt.label}
+                  </Text>
+                  {selected ? <Text style={styles.frequencyCheck}>✓</Text> : null}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </>
   );
 }
@@ -1129,6 +1253,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
+  reminderTimeHint: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginTop: -4,
+    marginBottom: 8,
+    lineHeight: 18,
+  },
+  timePickerDoneButton: {
+    alignSelf: 'flex-end',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginTop: 4,
+  },
+  timePickerDoneText: {
+    color: Colors.primary,
+    fontSize: 16,
+    fontWeight: '700',
+  },
   dateText: {
     fontSize: 16,
     color: Colors.textPrimary,
@@ -1137,30 +1279,53 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: Colors.textMuted,
   },
-  frequencyRow: {
+  frequencyOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  frequencyModal: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 340,
+    paddingVertical: 16,
+    overflow: 'hidden',
+  },
+  frequencyModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+    textAlign: 'center',
+    paddingBottom: 12,
+    marginBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.divider,
+  },
+  frequencyOption: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
   },
-  freqChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.cardBackground,
-  },
-  freqChipOn: {
-    borderColor: Colors.primary,
+  frequencyOptionSelected: {
     backgroundColor: Colors.primaryLight,
   },
-  freqChipText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.textSecondary,
+  frequencyOptionText: {
+    fontSize: 16,
+    color: Colors.textPrimary,
   },
-  freqChipTextOn: {
+  frequencyOptionTextSelected: {
     color: Colors.primary,
+    fontWeight: '600',
+  },
+  frequencyCheck: {
+    fontSize: 18,
+    color: Colors.primary,
+    fontWeight: '700',
   },
   intervalRow: {
     flexDirection: 'row',

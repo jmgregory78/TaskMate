@@ -24,6 +24,11 @@ export function computeNextDueDate(
 ): Date {
   const interval = Math.max(1, recurrence.interval);
   switch (recurrence.frequency) {
+    case 'none':
+      // One-time tasks have no next occurrence; callers should short-circuit
+      // before reaching here, but return the original date as a safe no-op.
+      return lastCompletedAt;
+
     case 'daily':
       return addDays(lastCompletedAt, interval);
 
@@ -114,6 +119,9 @@ function joinList(items: string[]): string {
 export function recurrenceSummary(r: RecurrenceRule, anchor?: Date): string {
   const i = r.interval;
   switch (r.frequency) {
+    case 'none':
+      return 'Does not repeat';
+
     case 'daily':
       return i === 1 ? 'Every day' : `Every ${i} days`;
 
@@ -217,6 +225,8 @@ function getMaxOccurrenceCount(recurrence: RecurrenceRule, baseCount: number): n
 export function recurrenceShortLabel(r: RecurrenceRule): string {
   const i = r.interval;
   switch (r.frequency) {
+    case 'none':
+      return 'Does not repeat';
     case 'daily':
       return i === 1 ? 'Repeats daily' : `Repeats every ${i} days`;
     case 'weekly':
